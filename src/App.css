@@ -1,0 +1,309 @@
+.app {
+  display: flex;
+  min-height: 100vh;
+  gap: 0;
+}
+
+/* ── Canvas Area ── */
+.canvas-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.canvas-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.canvas-header h1 {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dimmer);
+  margin-bottom: 4px;
+}
+
+.canvas-header p {
+  font-size: 10px;
+  color: var(--text-dimmer);
+}
+
+.canvas-wrapper {
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow:
+    0 0 80px rgba(94, 106, 210, 0.06),
+    0 4px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.canvas-wrapper canvas {
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.canvas-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dimmer);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.particle-count {
+  margin-top: 12px;
+  font-size: 10px;
+  color: var(--text-dimmer);
+  letter-spacing: 0.05em;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 300px;
+  min-width: 300px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-title {
+  padding: 20px 20px 0;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dimmer);
+}
+
+.controls-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.controls-section:last-child {
+  border-bottom: none;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.control-row:last-child {
+  margin-bottom: 0;
+}
+
+.control-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.control-value {
+  font-size: 10px;
+  color: var(--text-dimmer);
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  margin-left: 12px;
+}
+
+.control-slider input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.control-select {
+  margin-left: 12px;
+}
+
+/* ── SVG Upload ── */
+.svg-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upload-zone {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.upload-zone:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.upload-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.upload-icon {
+  font-size: 20px;
+  margin-bottom: 8px;
+  color: var(--text-dimmer);
+}
+
+.upload-text {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.upload-hint {
+  font-size: 9px;
+  color: var(--text-dimmer);
+  margin-top: 4px;
+}
+
+.upload-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.svg-paste {
+  width: 100%;
+  min-height: 60px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 10px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.svg-paste:focus {
+  border-color: var(--accent);
+}
+
+.svg-paste::placeholder {
+  color: var(--text-dimmer);
+}
+
+/* ── Buttons ── */
+.btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--mono);
+  transition: all 0.2s;
+}
+
+.btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.btn-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-accent:hover {
+  background: var(--accent-dim);
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Preset Logos ── */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.preset-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.preset-btn:hover {
+  border-color: var(--border-hover);
+  background: #1a1a1a;
+}
+
+.preset-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.preset-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.preset-btn span {
+  font-size: 9px;
+  color: var(--text-dimmer);
+  font-family: var(--mono);
+}
+
+/* ── Responsive ── */
+@media (max-width: 800px) {
+  .app {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    min-width: 0;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
