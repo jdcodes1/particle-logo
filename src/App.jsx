@@ -5,17 +5,24 @@ import { DITHER_ALGORITHMS } from './dithering';
 import { PRESET_LOGOS } from './presets';
 
 const DEFAULT_CONFIG = {
-  gap: 6,
-  particleSize: 4.5,
-  sizeVariance: 0.3,
-  softness: 0.1,
+  gap: 4,
+  particleSize: 3,
+  sizeVariance: 0,
+  softness: 0,
   spring: 0.055,
   damping: 0.85,
   repelRadius: 60,
   repelStrength: 5.0,
-  ditherAlgorithm: 'hex-jitter',
+  ditherAlgorithm: 'floyd-steinberg',
   ditherIntensity: 0.2,
   bgColor: '#0a0a0a',
+  // Floyd-Steinberg specific
+  fsThreshold: 101,
+  fsGamma: 1.03,
+  fsErrorStrength: 1.0,
+  fsSerpentine: true,
+  fsInvert: false,
+  fsParticleColor: [1, 1, 1],
 };
 
 function Slider({ label, value, min, max, step, onChange, format }) {
@@ -229,6 +236,47 @@ export default function App() {
               onChange={(v) => setStructural('ditherIntensity', v)}
               format={(v) => `${Math.round(v * 100)}%`}
             />
+          )}
+          {DITHER_ALGORITHMS[config.ditherAlgorithm]?.hasFS && (
+            <>
+              <Slider
+                label="threshold"
+                value={config.fsThreshold}
+                min={0} max={255} step={1}
+                onChange={(v) => setStructural('fsThreshold', v)}
+              />
+              <Slider
+                label="gamma"
+                value={config.fsGamma}
+                min={0.5} max={3.0} step={0.01}
+                onChange={(v) => setStructural('fsGamma', v)}
+              />
+              <Slider
+                label="error str"
+                value={config.fsErrorStrength}
+                min={0} max={1.5} step={0.05}
+                onChange={(v) => setStructural('fsErrorStrength', v)}
+                format={(v) => `${Math.round(v * 100)}%`}
+              />
+              <div className="control-row">
+                <span className="control-label">serpentine</span>
+                <input
+                  type="checkbox"
+                  checked={config.fsSerpentine}
+                  onChange={(e) => setStructural('fsSerpentine', e.target.checked)}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+              </div>
+              <div className="control-row">
+                <span className="control-label">invert</span>
+                <input
+                  type="checkbox"
+                  checked={config.fsInvert}
+                  onChange={(e) => setStructural('fsInvert', e.target.checked)}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+              </div>
+            </>
           )}
         </div>
 

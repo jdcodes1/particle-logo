@@ -188,11 +188,107 @@ function pack(positions, colors) {
   };
 }
 
+// ── Floyd-Steinberg Error Diffusion ──
+// True error-diffusion dithering. Converts image to luminance, then diffuses
+// quantization error to neighbors, producing organic density-varying dot patterns.
+export function floydSteinberg(px, width, height, gap, options = {}) {
+  const {
+    threshold = 101,
+    gamma = 1.03,
+    errorStrength = 1.0,
+    serpentine = true,
+    invert = false,
+    particleColor = [1, 1, 1],
+  } = options;
+
+  const gridW = Math.floor(width / gap);
+  const gridH = Math.floor(height / gap);
+  const lum = new Float32Array(gridW * gridH);
+  const alpha = new Float32Array(gridW * gridH);
+
+  // Build luminance grid at target resolution
+  for (let gy = 0; gy < gridH; gy++) {
+    for (let gx = 0; gx < gridW; gx++) {
+      const sx = Math.min(Math.round((gx + 0.5) * gap), width - 1);
+      const sy = Math.min(Math.round((gy + 0.5) * gap), height - 1);
+      const i = (sy * width + sx) * 4;
+      const r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3];
+
+      alpha[gy * gridW + gx] = a;
+
+      // Perceived luminance, scaled by alpha
+      let l = (0.299 * r + 0.587 * g + 0.114 * b) * (a / 255);
+
+      // Gamma correction (midtones)
+      if (gamma !== 1.0) {
+        l = 255 * Math.pow(l / 255, 1 / gamma);
+      }
+
+      lum[gy * gridW + gx] = l;
+    }
+  }
+
+  // Floyd-Steinberg error diffusion
+  const buf = new Float32Array(lum);
+  const output = new Uint8Array(gridW * gridH);
+
+  for (let y = 0; y < gridH; y++) {
+    const ltr = !serpentine || (y % 2 === 0);
+    const startX = ltr ? 0 : gridW - 1;
+    const endX = ltr ? gridW : -1;
+    const step = ltr ? 1 : -1;
+
+    for (let x = startX; x !== endX; x += step) {
+      const idx = y * gridW + x;
+      const oldVal = Math.max(0, Math.min(255, buf[idx]));
+      const newVal = oldVal > threshold ? 255 : 0;
+      output[idx] = newVal > 0 ? 1 : 0;
+
+      const err = (oldVal - newVal) * errorStrength;
+      const right = step;
+
+      if (x + right >= 0 && x + right < gridW)
+        buf[idx + right] += err * 7 / 16;
+      if (y + 1 < gridH) {
+        if (x - right >= 0 && x - right < gridW)
+          buf[(y + 1) * gridW + (x - right)] += err * 3 / 16;
+        buf[(y + 1) * gridW + x] += err * 5 / 16;
+        if (x + right >= 0 && x + right < gridW)
+          buf[(y + 1) * gridW + (x + right)] += err * 1 / 16;
+      }
+    }
+  }
+
+  // Collect particles
+  const positions = [], colors = [];
+  const [cr, cg, cb] = particleColor;
+
+  for (let gy = 0; gy < gridH; gy++) {
+    for (let gx = 0; gx < gridW; gx++) {
+      const idx = gy * gridW + gx;
+      if (alpha[idx] < 10) continue;
+
+      const isDot = output[idx] === 0; // 0 = dark = dot
+      const place = invert ? !isDot : isDot;
+      if (!place) continue;
+
+      const worldX = (gx + 0.5) * gap - width / 2;
+      const worldY = -((gy + 0.5) * gap - height / 2);
+
+      positions.push(worldX, worldY, 0);
+      colors.push(cr, cg, cb);
+    }
+  }
+
+  return pack(positions, colors);
+}
+
 // ── Algorithm registry ──
 export const DITHER_ALGORITHMS = {
-  'hex-jitter': { name: 'Hex Grid + Jitter', fn: hexGridJitter, hasIntensity: true },
-  'uniform': { name: 'Uniform Grid', fn: uniformGrid, hasIntensity: false },
-  'blue-noise': { name: 'Blue Noise', fn: blueNoise, hasIntensity: false },
-  'halton': { name: 'Halton Sequence', fn: haltonSequence, hasIntensity: false },
-  'bayer': { name: 'Bayer (Ordered)', fn: bayerDither, hasIntensity: true },
+  'floyd-steinberg': { name: 'Floyd-Steinberg', fn: floydSteinberg, hasIntensity: false, hasFS: true },
+  'hex-jitter': { name: 'Hex Grid + Jitter', fn: hexGridJitter, hasIntensity: true, hasFS: false },
+  'uniform': { name: 'Uniform Grid', fn: uniformGrid, hasIntensity: false, hasFS: false },
+  'blue-noise': { name: 'Blue Noise', fn: blueNoise, hasIntensity: false, hasFS: false },
+  'halton': { name: 'Halton Sequence', fn: haltonSequence, hasIntensity: false, hasFS: false },
+  'bayer': { name: 'Bayer (Ordered)', fn: bayerDither, hasIntensity: true, hasFS: false },
 };

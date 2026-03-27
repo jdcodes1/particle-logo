@@ -70,7 +70,16 @@ export default function ParticleLogo({
       try {
         const px = await getPixelData(svgString, width, height);
         const algo = DITHER_ALGORITHMS[config.ditherAlgorithm];
-        if (algo.hasIntensity) {
+        if (algo.hasFS) {
+          data = algo.fn(px, width, height, config.gap, {
+            threshold: config.fsThreshold,
+            gamma: config.fsGamma,
+            errorStrength: config.fsErrorStrength,
+            serpentine: config.fsSerpentine,
+            invert: config.fsInvert,
+            particleColor: config.fsParticleColor,
+          });
+        } else if (algo.hasIntensity) {
           data = algo.fn(px, width, height, config.gap, config.ditherIntensity);
         } else {
           data = algo.fn(px, width, height, config.gap);
@@ -190,7 +199,7 @@ export default function ParticleLogo({
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
       renderer.dispose();
     };
-  }, [svgString, width, height, config.gap, config.ditherAlgorithm, config.ditherIntensity, config.bgColor]);
+  }, [svgString, width, height, config.gap, config.ditherAlgorithm, config.ditherIntensity, config.bgColor, config.fsThreshold, config.fsGamma, config.fsErrorStrength, config.fsSerpentine, config.fsInvert]);
   // Only re-init on structural changes. Physics/visual params update live via refs in animate loop.
 
   const onMove = useCallback((e) => {
