@@ -9,6 +9,9 @@
 
 .workspace {
   display: grid;
+  /* Explicit tracks: the canvas's pixel size must never prop the layout open
+     (otherwise it can't shrink after present mode or a window resize). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
@@ -74,6 +77,7 @@
 
 .stage {
   position: relative;
+  min-width: 0;
   min-height: 0;
   padding: 8px 28px 16px;
   display: flex;
@@ -81,6 +85,7 @@
 
 .particle-frame {
   position: relative;
+  overflow: hidden;
   flex: 1;
   display: flex;
   align-items: center;
