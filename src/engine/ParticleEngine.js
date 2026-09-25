@@ -293,8 +293,11 @@ export class ParticleEngine {
 
   /* Geometry of the stage, in abstract units. */
   setStage(w, h) {
+    if (this.stage.w === w && this.stage.h === h) return;
     this.stage = { w, h };
     this.view.setStage(w, h);
+    if (this.cfg) applyUniforms(this.view, this.cfg, this.stage);
+    if (this.cssW) this.view.materials.uniforms.uPxPerUnit.value = (this.cssW * this.dpr) / w;
   }
 
   setViewport(cssW, cssH, dpr) {
@@ -357,6 +360,7 @@ export class ParticleEngine {
   }
 
   introduce(layout, colors, styleKey) {
+    this.pendingCompact = null;
     const { buffers, style } = bakeIntro(layout, colors, styleKey, this.stage, this.cfg.seed);
     this.install(buffers, layout.count, Uint32Array.from({ length: layout.count }, (_, i) => i));
     this.beginTransition(style, this.cfg.introSpeed);
@@ -519,10 +523,10 @@ export class ParticleEngine {
       vel[i * 2] = oldVel[q * 2];
       vel[i * 2 + 1] = oldVel[q * 2 + 1];
     }
+    // Start = home, so the clock can keep running untouched (the sheen and
+    // idle phases stay continuous).
     this.install(b, n, Uint32Array.from({ length: n }, (_, i) => i));
     this.vel = vel;
-    this.transition = INTRO_STYLES.none;
-    this.introTime = 1e4;
   }
 
   /* ── Pointer ───────────────────────────────────────────────────────── */
@@ -604,6 +608,16 @@ export class ParticleEngine {
       premultipliedAlpha: true,
       preserveDrawingBuffer: true,
     });
+    // Oversized targets would silently clip; fail loudly instead.
+    const gl = renderer.getContext();
+    const [maxW, maxH] = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+    const maxRb = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+    const limit = Math.min(maxW, maxH, maxRb);
+    if (width > limit || height > limit) {
+      renderer.dispose();
+      renderer.forceContextLoss();
+      throw new Error(`This GPU can render up to ${limit} px — choose a smaller export size.`);
+    }
     renderer.setPixelRatio(1);
     renderer.setSize(width, height, false);
     renderer.setClearColor(0x000000, 0);
