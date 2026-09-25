@@ -5,7 +5,9 @@ high‑resolution image, a vector SVG, a frame‑accurate video or a drop‑in H
 embed. Inspired by [particl.art](https://particl.art) and
 [Emil Kowalski's demo](https://x.com/emilkowalski/status/2036778116748542220).
 
-**[Live Demo](https://particle-logo.vercel.app)**
+**[Live Demo](https://particle-logo.vercel.app)** · **[Watch the 1‑minute walkthrough](docs/media/demo.mp4)**
+
+![Particle Logo: the App Icon preset in the Studio style, mid light sweep](docs/media/screenshot.png)
 
 ## Highlights
 
