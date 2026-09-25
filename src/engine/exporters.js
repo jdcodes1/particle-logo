@@ -3,9 +3,11 @@
  * Every export renders offscreen at a fixed timestep, so output is identical
  * regardless of display size or frame rate.
  */
-import { rgbToHex } from './color';
+import { hexToRgb, rgbToHex } from './color';
 import { mulberry32 } from './layouts';
-import { spotlightColors } from './ParticleEngine';
+import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors } from './motion';
+import { particleRuntime } from './embedRuntime';
+import { particleVertex, dotFragment, glowFragment, backgroundVertex, backgroundFragment } from './shaders';
 
 export function download(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -68,7 +70,7 @@ export function exportSVG(engine, { transparent = false } = {}) {
   let background = '';
   if (!transparent) {
     if (cfg.spotlight) {
-      const { center, edge } = spotlightColors(cfg.background);
+      const { center, edge } = spotlightColors(hexToRgb(cfg.background));
       // Matches the shader: smoothstep falloff reaching the edge color at
       // 1.15 × half the longer side. Approximated with a few stops.
       const reach = (1.15 * Math.max(W, H)) / 2;
@@ -110,14 +112,103 @@ export function exportSVG(engine, { transparent = false } = {}) {
   );
 }
 
+function toBase64(typed) {
+  const bytes = new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+const quantize16 = (arr) => Int16Array.from(arr, (v) => Math.max(-32767, Math.min(32767, Math.round(v * 16))));
+const quantize8 = (arr) => Uint8Array.from(arr, (v) => Math.max(0, Math.min(255, Math.round(v * 255))));
+
+/**
+ * A single self-contained HTML file with the live, interactive logo — no
+ * dependencies, ready to host or drop into an <iframe>. The intro plays when
+ * the logo scrolls into view.
+ */
+export function exportHTML(engine, { transparent = false, title = 'Particle logo' } = {}) {
+  const { cfg, stage, layout } = engine;
+  const baked = engine.bake(cfg.intro);
+  const b = baked.buffers;
+  const n = layout.count;
+  const home = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    home[i * 2] = b.position[i * 3];
+    home[i * 2 + 1] = b.position[i * 3 + 1];
+  }
+  const keys = [
+    'dotSize', 'sizeVariance', 'brightnessVariance', 'softness', 'glow', 'glowSize', 'spotlight', 'idle',
+    'twinkle', 'sheen', 'sheenInterval', 'repelRadius', 'repelStrength', 'swirl', 'drag', 'spring',
+    'damping', 'lens', 'clickBurst',
+  ];
+  const data = {
+    count: n,
+    stage,
+    bounds: layout.bounds,
+    transparent,
+    cfg: { ...Object.fromEntries(keys.map((k) => [k, cfg[k]])), background: hexToRgb(cfg.background) },
+    intro: {
+      duration: baked.duration,
+      stagger: baked.stagger,
+      ease: baked.style.ease,
+      curve: baked.style.curve,
+      fadeIn: baked.style.fadeIn,
+      polar: baked.style.polar,
+    },
+    home: toBase64(quantize16(home)),
+    start: toBase64(quantize16(b.start)),
+    color: toBase64(quantize8(b.color)),
+    scale: toBase64(quantize8(b.scale)),
+    startScale: toBase64(quantize8(b.startScale)),
+    delay: toBase64(quantize8(b.delay)),
+    rand: toBase64(quantize8(b.rand)),
+  };
+  const lib = `{
+  shaders: ${JSON.stringify({ particleVertex, dotFragment, glowFragment, backgroundVertex, backgroundFragment })},
+  advancePointer: ${advancePointer.toString()},
+  stepSprings: ${stepSprings.toString()},
+  applyBurst: ${applyBurst.toString()},
+  sheenPosition: ${sheenPosition.toString()},
+  spotlightColors: ${spotlightColors.toString()}
+}`;
+  const bg = transparent ? 'transparent' : cfg.background;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<style>
+  html, body { margin: 0; height: 100%; background: ${bg}; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="particle-logo" aria-label="${esc(title)}" role="img"></canvas>
+<script>
+(function () {
+  var run = (${particleRuntime.toString()});
+  var canvas = document.getElementById('particle-logo');
+  canvas.particleLogo = run(canvas, ${JSON.stringify(data)}, ${lib});
+})();
+</script>
+</body>
+</html>
+`;
+}
+
 /**
  * Frame-accurate video of the intro followed by `hold` seconds of idle
- * motion. Uses WebCodecs via mediabunny; MP4 (H.264) by default, WebM (VP9)
- * with an alpha channel when `transparent` is set.
+ * motion — and, with `loop`, the intro played backwards so the clip loops
+ * seamlessly. Uses WebCodecs via mediabunny; MP4 (H.264 where available) by
+ * default, WebM (VP9) with an alpha channel when `transparent` is set.
+ * Resolves to { blob, codec, extension }.
  */
 export async function exportVideo(
   engine,
-  { longEdge = 1920, fps = 60, hold = 3, transparent = false, onProgress, signal } = {},
+  { longEdge = 1920, fps = 60, hold = 3, loop = false, transparent = false, onProgress, signal } = {},
 ) {
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('Video export needs WebCodecs — use a recent Chrome, Edge or Safari.');
@@ -125,7 +216,7 @@ export async function exportVideo(
   const mb = await import('mediabunny');
   const { width, height } = exportSize(engine.stage, longEdge);
   const webm = transparent;
-  const codec = await mb.getFirstEncodableVideoCodec(webm ? ['vp9', 'av1', 'vp8'] : ['avc', 'hevc', 'vp9', 'av1'], {
+  const codec = await mb.getFirstEncodableVideoCodec(webm ? ['vp9', 'av1'] : ['avc', 'hevc', 'vp9', 'av1'], {
     width,
     height,
   });
@@ -145,17 +236,24 @@ export async function exportVideo(
 
   try {
     await output.start();
-    const duration = off.introEnd + hold;
-    const frames = Math.ceil(duration * fps);
+    const intro = off.introEnd;
+    const outroStart = intro + hold;
+    const duration = loop ? outroStart + intro : outroStart;
+    const frames = Math.max(1, Math.round(duration * fps));
     for (let i = 0; i < frames; i++) {
       if (signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
       const t = i / fps;
-      off.render(t);
+      const introTime = loop && t > outroStart ? Math.max(0, intro - (t - outroStart)) : t;
+      off.render(t, { introTime });
       await source.add(t, 1 / fps);
       onProgress?.((i + 1) / frames);
     }
     await output.finalize();
-    return new Blob([output.target.buffer], { type: output.format.mimeType });
+    return {
+      blob: new Blob([output.target.buffer], { type: output.format.mimeType }),
+      codec,
+      extension: webm ? 'webm' : 'mp4',
+    };
   } catch (err) {
     if (output.state !== 'finalized' && output.state !== 'canceled') await output.cancel().catch(() => {});
     throw err;

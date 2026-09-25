@@ -59,7 +59,7 @@ export default function App() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [exporting, setExporting] = useState(null); // { kind, progress }
-  const [exportOpts, setExportOpts] = useState({ png: 4096, transparent: false, video: 1920, hold: 3, videoAlpha: false });
+  const [exportOpts, setExportOpts] = useState({ png: 4096, transparent: false, video: 1920, hold: 3, loop: false, videoAlpha: false });
   const logoRef = useRef(null);
   const fileRef = useRef(null);
   const abortRef = useRef(null);
@@ -164,18 +164,29 @@ export default function App() {
       } else if (kind === 'svg') {
         const text = api.exportSVG({ transparent: exportOpts.transparent });
         download(new Blob([text], { type: 'image/svg+xml' }), `${base}.svg`);
+      } else if (kind === 'html') {
+        const html = api.exportHTML({ transparent: exportOpts.transparent, title: `${sourceName} — particle logo` });
+        download(new Blob([html], { type: 'text/html' }), `${base}.html`);
       } else if (kind === 'video') {
         const controller = new AbortController();
         abortRef.current = controller;
         setExporting({ kind, progress: 0 });
-        const blob = await api.exportVideo({
+        const { blob, codec, extension } = await api.exportVideo({
           longEdge: exportOpts.video,
           hold: exportOpts.hold,
+          loop: exportOpts.loop,
           transparent: exportOpts.videoAlpha,
           signal: controller.signal,
           onProgress: (p) => setExporting({ kind, progress: p }),
         });
-        download(blob, `${base}-${exportOpts.video}.${exportOpts.videoAlpha ? 'webm' : 'mp4'}`);
+        download(blob, `${base}-${exportOpts.video}.${extension}`);
+        const label = { avc: 'H.264', hevc: 'HEVC', vp9: 'VP9', av1: 'AV1' }[codec] || codec;
+        notify(
+          extension === 'mp4' && codec !== 'avc'
+            ? `Exported ${label} MP4 — H.264 isn’t available in this browser.`
+            : `Exported ${label} ${extension.toUpperCase()}.`,
+        );
+        return;
       }
       notify('Export ready.');
     } catch (err) {
@@ -465,7 +476,7 @@ export default function App() {
               { value: 8192, label: '8K · 8192 px' },
             ]}
           />
-          <Toggle label="Transparent" checked={exportOpts.transparent} onChange={(v) => setExport('transparent', v)} hint="Omit the background from PNG and SVG exports" />
+          <Toggle label="Transparent" checked={exportOpts.transparent} onChange={(v) => setExport('transparent', v)} hint="Omit the background from PNG, SVG and embed exports" />
           <div className="button-row">
             <button type="button" className="btn" disabled={!!exporting} onClick={() => runExport('png')}>
               <DownloadIcon />
@@ -474,6 +485,10 @@ export default function App() {
             <button type="button" className="btn" disabled={!!exporting} onClick={() => runExport('svg')}>
               <DownloadIcon />
               SVG
+            </button>
+            <button type="button" className="btn" disabled={!!exporting} onClick={() => runExport('html')} title="Self-contained interactive HTML — host it or embed with an iframe">
+              <CodeIcon />
+              Embed
             </button>
           </div>
           <div className="divider" />
@@ -488,6 +503,7 @@ export default function App() {
             ]}
           />
           <Slider label="Hold after intro" value={exportOpts.hold} min={0} max={10} step={0.5} onChange={(v) => setExport('hold', v)} format={secs} />
+          <Toggle label="Loop" checked={exportOpts.loop} onChange={(v) => setExport('loop', v)} hint="Play the intro in reverse at the end so the clip loops seamlessly" />
           <Toggle label="Alpha (WebM)" checked={exportOpts.videoAlpha} onChange={(v) => setExport('videoAlpha', v)} hint="Transparent VP9 WebM instead of MP4" />
           {exporting?.kind === 'video' ? (
             <div className="progress">

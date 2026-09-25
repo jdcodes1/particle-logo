@@ -14,6 +14,7 @@ import {
 } from './shaders';
 import { hexToRgb, mixOklab } from './color';
 import { mulberry32 } from './layouts';
+import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors } from './motion';
 
 /* ── Intro choreography ─────────────────────────────────────────────── */
 
@@ -218,7 +219,7 @@ class ParticleScene {
     this.glowPoints = new THREE.Points(geometry, this.materials.glow);
     this.glowPoints.frustumCulled = false;
     this.glowPoints.renderOrder = 0;
-    this.glowPoints.visible = this.materials.uniforms.uGlow.value > 0;
+    this.glowPoints.visible = this.materials.uniforms.uGlow.value > 0 || this.materials.uniforms.uSheen.value > 0;
     this.points = new THREE.Points(geometry, this.materials.dots);
     this.points.frustumCulled = false;
     this.points.renderOrder = 1;
@@ -353,19 +354,22 @@ export class ParticleEngine {
   }
 
   introduce(layout, colors, styleKey) {
-    const n = layout.count;
-    const b = buildGeometry(n);
-    fillStatic(b, layout, colors, this.cfg.seed);
-    const style = INTRO_STYLES[styleKey] || INTRO_STYLES.assemble;
-    const intro = introAttributes(styleKey, layout, this.stage, this.cfg.seed);
-    b.start.set(intro.start);
-    b.delay.set(intro.delay);
-    for (let i = 0; i < n; i++) {
-      b.startScale[i] = intro.startScale[i] < 0 ? b.scale[i] : intro.startScale[i] * b.scale[i];
-    }
-    b.startColor.set(b.color);
-    this.install(b, n, Uint32Array.from({ length: n }, (_, i) => i));
+    const { buffers, style } = bakeIntro(layout, colors, styleKey, this.stage, this.cfg.seed);
+    this.install(buffers, layout.count, Uint32Array.from({ length: layout.count }, (_, i) => i));
     this.beginTransition(style, this.cfg.introSpeed);
+  }
+
+  /** Geometry + timing for playing `intro` on the current layout (used by exports). */
+  bake(intro) {
+    const { buffers, style } = bakeIntro(this.layout, this.computeColors(), intro || 'none', this.stage, this.cfg.seed);
+    const sp = Math.max(0.1, this.cfg.introSpeed);
+    return {
+      buffers,
+      style,
+      duration: style.duration / sp,
+      stagger: style.stagger / sp,
+      end: intro ? (style.duration + style.stagger) / sp : 0,
+    };
   }
 
   morphTo(layout, colors) {
@@ -536,19 +540,8 @@ export class ParticleEngine {
   /** Radial impulse, e.g. on click. */
   burst(x, y) {
     if (!this.buffers || !this.cfg) return;
-    const b = this.buffers, v = this.vel;
-    const R = this.cfg.repelRadius * 2.4;
-    const S = this.cfg.repelStrength * 3.2;
-    for (let i = 0; i < this.count; i++) {
-      const px = b.position[i * 3] + b.offset[i * 2];
-      const py = b.position[i * 3 + 1] + b.offset[i * 2 + 1];
-      const dx = px - x, dy = py - y;
-      const d = Math.hypot(dx, dy);
-      if (d > R || d < 1e-3) continue;
-      const q = 1 - d / R;
-      v[i * 2] += (dx / d) * S * q * q;
-      v[i * 2 + 1] += (dy / d) * S * q * q;
-    }
+    const b = this.buffers;
+    applyBurst(b.offset, this.vel, b.position, 3, this.count, x, y, this.cfg.repelRadius * 2.4, this.cfg.repelStrength * 3.2);
     this.awake = true;
   }
 
@@ -566,7 +559,7 @@ export class ParticleEngine {
     this.introTime += dt;
     if (this.pendingCompact && this.introTime > this.transitionEnd + 0.05) this.compact();
 
-    this.stepPointer(dt);
+    advancePointer(this.pointer, dt);
     if (this.awake) this.stepPhysics(dt);
 
     const u = this.view.materials.uniforms;
@@ -578,68 +571,13 @@ export class ParticleEngine {
     this.renderer.render(this.view.scene, this.view.camera);
   };
 
-  stepPointer(dt) {
-    const p = this.pointer;
-    const k = 1 - Math.exp(-dt * 22);
-    const nx = p.sx + (p.x - p.sx) * k;
-    const ny = p.sy + (p.y - p.sy) * k;
-    const f = dt * 60 || 1;
-    p.vx = (nx - p.sx) / f;
-    p.vy = (ny - p.sy) / f;
-    p.sx = nx;
-    p.sy = ny;
-    const target = p.active ? 1 : 0;
-    p.amt += (target - p.amt) * (1 - Math.exp(-dt * (p.active ? 10 : 5)));
-    if (p.amt < 1e-3 && !p.active) p.amt = 0;
-  }
-
   stepPhysics(dt) {
-    const cfg = this.cfg;
     const b = this.buffers;
-    const off = b.offset, vel = this.vel, home = b.position;
-    const f = Math.min(3, dt * 60);
-    const damp = Math.pow(cfg.damping, f);
-    const k = cfg.spring;
-    const p = this.pointer;
-    const R = cfg.repelRadius, R2 = R * R;
-    const S = cfg.repelStrength * p.amt;
-    const swirl = cfg.swirl;
-    const drag = cfg.drag;
-    const interact = p.amt > 0.01;
-    let energy = 0;
-
-    for (let i = 0; i < this.count; i++) {
-      const ix = i * 2, iy = ix + 1;
-      let ox = off[ix], oy = off[iy], vx = vel[ix], vy = vel[iy];
-      if (interact) {
-        const dx = home[i * 3] + ox - p.sx;
-        const dy = home[i * 3 + 1] + oy - p.sy;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < R2 && d2 > 1e-4) {
-          const d = Math.sqrt(d2);
-          const q = 1 - d / R;
-          const fall = q * q * (3 - 2 * q); // smoothstep falloff
-          const nx = dx / d, ny = dy / d;
-          vx += (nx * S - ny * S * swirl) * fall * f * 0.5;
-          vy += (ny * S + nx * S * swirl) * fall * f * 0.5;
-          vx += p.vx * drag * fall * f * 0.5;
-          vy += p.vy * drag * fall * f * 0.5;
-        }
-      }
-      vx = (vx - ox * k * f) * damp;
-      vy = (vy - oy * k * f) * damp;
-      ox += vx * f;
-      oy += vy * f;
-      off[ix] = ox;
-      off[iy] = oy;
-      vel[ix] = vx;
-      vel[iy] = vy;
-      energy += Math.abs(ox) + Math.abs(oy) + Math.abs(vx) + Math.abs(vy);
-    }
+    const energy = stepSprings(b.offset, this.vel, b.position, 3, this.count, this.pointer, this.cfg, dt);
     b.geometry.attributes.aOffset.needsUpdate = true;
-    if (!p.active && energy < 0.01 * Math.max(1, this.count / 1000)) {
-      off.fill(0);
-      vel.fill(0);
+    if (!this.pointer.active && energy < 0.01 * Math.max(1, this.count / 1000)) {
+      b.offset.fill(0);
+      this.vel.fill(0);
       this.awake = false;
     }
   }
@@ -668,44 +606,38 @@ export class ParticleEngine {
     const view = new ParticleScene();
     view.setStage(this.stage.w, this.stage.h);
     const layout = this.layout;
-    const n = layout.count;
-    const b = buildGeometry(n);
-    fillStatic(b, layout, this.computeColors(), this.cfg.seed);
-    const styleKey = intro || 'none';
-    const style = INTRO_STYLES[styleKey] || INTRO_STYLES.none;
-    const ia = introAttributes(styleKey, layout, this.stage, this.cfg.seed);
-    b.start.set(ia.start);
-    b.delay.set(ia.delay);
-    for (let i = 0; i < n; i++) b.startScale[i] = ia.startScale[i] < 0 ? b.scale[i] : ia.startScale[i] * b.scale[i];
-    b.startColor.set(b.color);
-    view.setGeometry(b.geometry);
+    const baked = this.bake(intro);
+    view.setGeometry(baked.buffers.geometry);
 
     applyUniforms(view, { ...this.cfg, transparent }, this.stage);
     const u = view.materials.uniforms;
-    const sp = Math.max(0.1, this.cfg.introSpeed);
     u.uPxPerUnit.value = width / this.stage.w;
     u.uOffsetMix.value = 0;
     u.uPointerAmt.value = 0;
-    u.uDuration.value = style.duration / sp;
-    u.uStagger.value = style.stagger / sp;
-    u.uEase.value = style.ease;
-    u.uCurve.value = style.curve;
-    u.uFadeIn.value = style.fadeIn;
-    u.uPolar.value = style.polar;
-    const introEnd = intro ? (style.duration + style.stagger) / sp : 0;
+    u.uDuration.value = baked.duration;
+    u.uStagger.value = baked.stagger;
+    u.uEase.value = baked.style.ease;
+    u.uCurve.value = baked.style.curve;
+    u.uFadeIn.value = baked.style.fadeIn;
+    u.uPolar.value = baked.style.polar;
+    const introEnd = baked.end;
 
     return {
       canvas,
       introEnd,
-      render: (t, { still = false } = {}) => {
-        u.uIntroTime.value = intro ? t : 1e4;
+      /**
+       * Render at clock time `t`. `introTime` (defaults to `t`) positions the
+       * intro timeline separately, which lets a video play it in reverse.
+       */
+      render: (t, { still = false, introTime = t } = {}) => {
+        u.uIntroTime.value = intro ? introTime : 1e4;
         u.uTime.value = t;
         if (still) {
           u.uIdle.value = 0;
           u.uTwinkle.value = 0;
           u.uSheen.value = 0;
         } else {
-          updateSheen(u, this.cfg, layout, t - introEnd);
+          updateSheen(u, this.cfg, layout, introTime < t ? -1 : t - introEnd);
         }
         renderer.render(view.scene, view.camera);
       },
@@ -781,6 +713,22 @@ function nearestIndexer(pts, n) {
   };
 }
 
+/** Buffers for a layout about to play an intro style. */
+function bakeIntro(layout, colors, styleKey, stage, seed) {
+  const n = layout.count;
+  const b = buildGeometry(n);
+  fillStatic(b, layout, colors, seed);
+  const style = INTRO_STYLES[styleKey] || INTRO_STYLES.assemble;
+  const intro = introAttributes(styleKey, layout, stage, seed);
+  b.start.set(intro.start);
+  b.delay.set(intro.delay);
+  for (let i = 0; i < n; i++) {
+    b.startScale[i] = intro.startScale[i] < 0 ? b.scale[i] : intro.startScale[i] * b.scale[i];
+  }
+  b.startColor.set(b.color);
+  return { buffers: b, style };
+}
+
 function fillRandom(rand, n, seed) {
   const rng = mulberry32(seed + 17);
   for (let i = 0; i < n * 4; i++) rand[i] = rng();
@@ -838,47 +786,19 @@ function applyUniforms(view, cfg, stage) {
   u.uSheenWidth.value = Math.max(stage.w, stage.h) * 0.06;
   u.uGlow.value = cfg.glow;
   view.materials.glow.uniforms.uSizeMul.value = cfg.glowSize;
-  view.glowPoints && (view.glowPoints.visible = cfg.glow > 0);
+  if (view.glowPoints) view.glowPoints.visible = cfg.glow > 0 || cfg.sheen > 0;
 
   const bg = view.materials.background.uniforms;
-  const { edge, center } = spotlightColors(cfg.background);
-  bg.uColor.value.set(...(cfg.spotlight ? edge : hexToRgb(cfg.background)));
+  const base = hexToRgb(cfg.background);
+  const { edge, center } = spotlightColors(base);
+  bg.uColor.value.set(...(cfg.spotlight ? edge : base));
   bg.uColor2.value.set(...center);
   bg.uSpot.value = cfg.spotlight ? 1 : 0;
   view.bg.visible = !cfg.transparent;
 }
 
-/**
- * Spotlight gradient stops: a soft lift toward white in the middle. Light
- * backgrounds can't get much brighter, so their edges darken slightly instead.
- */
-export function spotlightColors(hex) {
-  const c = hexToRgb(hex);
-  const lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-  const mix = (a, t) => c.map((v, i) => v + (a[i] - v) * t);
-  if (lum > 0.5) return { center: mix([1, 1, 1], 0.6), edge: mix([0, 0, 0], 0.045) };
-  return { center: mix([1, 1, 1], 0.055), edge: c };
-}
-
-const SHEEN_SWEEP = 2.2;
-
 function updateSheen(u, cfg, layout, sinceIntro) {
-  if (!cfg.sheen || !layout || sinceIntro < 0.4) {
-    u.uSheenPos.value = 1e5;
-    return;
-  }
-  const { minX, minY, maxX, maxY } = layout.bounds;
-  const dir = u.uSheenDir.value;
-  const ext = [[minX, minY], [maxX, minY], [minX, maxY], [maxX, maxY]].map(([x, y]) => x * dir.x + y * dir.y);
-  const lo = Math.min(...ext) - u.uSheenWidth.value * 2.5;
-  const hi = Math.max(...ext) + u.uSheenWidth.value * 2.5;
-  const cycle = SHEEN_SWEEP + cfg.sheenInterval;
-  const t = (sinceIntro - 0.4) % cycle;
-  if (t > SHEEN_SWEEP) {
-    u.uSheenPos.value = 1e5;
-    return;
-  }
-  const x = t / SHEEN_SWEEP;
-  const e = x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
-  u.uSheenPos.value = lo + (hi - lo) * e;
+  u.uSheenPos.value = cfg.sheen && layout
+    ? sheenPosition(layout.bounds, [u.uSheenDir.value.x, u.uSheenDir.value.y], u.uSheenWidth.value, cfg.sheenInterval, sinceIntro)
+    : 1e5;
 }

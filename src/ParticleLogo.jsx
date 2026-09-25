@@ -3,7 +3,7 @@ import { ParticleEngine } from './engine/ParticleEngine';
 import { rasterizeSvg } from './engine/rasterize';
 import { buildLayout } from './engine/layouts';
 import { ASPECTS, LAYOUT_KEYS, RASTER_KEYS } from './engine/config';
-import { exportPNG, exportSVG, exportVideo } from './engine/exporters';
+import { exportPNG, exportSVG, exportVideo, exportHTML } from './engine/exporters';
 
 const keyOf = (cfg, keys) => keys.map((k) => String(cfg[k])).join('|');
 
@@ -14,7 +14,7 @@ const keyOf = (cfg, keys) => keys.map((k) => String(cfg[k])).join('|');
  *  - svg: SVG markup
  *  - config: see engine/config.js DEFAULT_CONFIG
  *  - onStats({ count }), onError(message | null)
- *  - ref: { replay(), exportPNG(opts), exportSVG(opts), exportVideo(opts) }
+ *  - ref: { replay(), exportPNG(opts), exportSVG(opts), exportVideo(opts), exportHTML(opts) }
  */
 export default function ParticleLogo({ svg, config, onStats, onError, className = '', ref }) {
   const frameRef = useRef(null);
@@ -117,6 +117,7 @@ export default function ParticleLogo({ svg, config, onStats, onError, className 
     exportPNG: (opts) => exportPNG(engineRef.current, opts),
     exportSVG: (opts) => exportSVG(engineRef.current, opts),
     exportVideo: (opts) => exportVideo(engineRef.current, opts),
+    exportHTML: (opts) => exportHTML(engineRef.current, opts),
     get engine() {
       return engineRef.current;
     },

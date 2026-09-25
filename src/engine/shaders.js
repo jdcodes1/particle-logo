@@ -49,6 +49,7 @@ export const particleVertex = /* glsl */ `
   varying float vAlpha;
   varying float vPx;
   varying float vSprite;
+  varying float vSheen;
 
   float ease(float t) {
     if (uEase < 0.5) return t >= 1.0 ? 1.0 : 1.0 - pow(2.0, -10.0 * t);
@@ -93,7 +94,7 @@ export const particleVertex = /* glsl */ `
 
     float size = uDotSize * scale
       * (1.0 + (aRand.w - 0.5) * 2.0 * uSizeVar)
-      * (1.0 + lens * uLens + sheen * 0.3);
+      * (1.0 + lens * uLens + sheen * 0.4);
 
     col = col * bright;
     col = mix(col, vec3(1.0), clamp(sheen * 0.55 + lens * uLens * 0.12, 0.0, 1.0));
@@ -105,6 +106,7 @@ export const particleVertex = /* glsl */ `
     px = max(px, 1.0);
 
     vColor = col;
+    vSheen = sheen;
     vAlpha = alpha;
     vPx = px;
     vSprite = px + 2.0;
@@ -136,10 +138,12 @@ export const glowFragment = /* glsl */ `
   uniform float uGlow;
   varying vec3 vColor;
   varying float vAlpha;
+  varying float vSheen;
 
   void main() {
     vec2 c = gl_PointCoord - 0.5;
-    float g = exp(-18.0 * dot(c, c)) * uGlow * vAlpha;
+    // The sheen band borrows the glow pass so it reads even on white logos.
+    float g = exp(-18.0 * dot(c, c)) * (uGlow + vSheen * 0.22) * vAlpha;
     if (g < 0.001) discard;
     gl_FragColor = vec4(vColor * g, g * 0.6);
   }
