@@ -15,6 +15,9 @@ embed. Inspired by [particl.art](https://particl.art) and
   particles (sharp corners are pinned), so edges stay clean at any density.
   Multi-color marks are split into color regions, and every hard internal
   color edge gets the same crisp treatment — while gradients stay smooth.
+- **Styles** — eight curated looks (Studio, Minimal, Neon, Constellation,
+  Bokeh, LED, Halftone, Dither) set every visual parameter in one click and
+  leave your colors alone. Fine‑tune anything afterwards.
 - **Four layouts**
   - **Organic** — contour particles plus a relaxed blue‑noise fill: calm,
     even and still clearly made of particles.

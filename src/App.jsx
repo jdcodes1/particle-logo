@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import ParticleLogo from './ParticleLogo';
 import { PRESET_LOGOS } from './presets';
-import { ASPECTS, DEFAULT_CONFIG } from './engine/config';
+import { ASPECTS, DEFAULT_CONFIG, LOOKS, activeLook } from './engine/config';
 import { INTRO_STYLES } from './engine/ParticleEngine';
 import { LAYOUTS } from './engine/layouts';
 import { contrastRatio, hexToRgb } from './engine/color';
@@ -231,6 +231,7 @@ export default function App() {
     }
   };
 
+  const look = activeLook(config);
   const layoutHasShape = config.layout === 'grid' || config.layout === 'halftone';
   const usesTone = config.layout === 'halftone' || config.layout === 'dither';
   const stage = ASPECTS[config.aspect];
@@ -382,6 +383,22 @@ export default function App() {
             </div>
           )}
           <Slider label="Logo size" value={config.logoScale} min={0.3} max={0.9} step={0.01} onChange={(v) => set('logoScale', v)} format={pct} />
+        </Section>
+
+        <Section title="Style" aside={look ? null : <span className="section-note">Custom</span>}>
+          <div className="look-grid">
+            {Object.entries(LOOKS).map(([key, l]) => (
+              <button
+                type="button"
+                key={key}
+                className={`look ${look === key ? 'active' : ''}`}
+                onClick={() => setConfig((c) => ({ ...c, ...l.settings }))}
+              >
+                <span className={`look-swatch look-${key}`} aria-hidden="true" />
+                {l.name}
+              </button>
+            ))}
+          </div>
         </Section>
 
         <Section title="Layout">

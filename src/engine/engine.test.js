@@ -140,6 +140,14 @@ describe('lattice layouts', () => {
     expect(partial).toBeGreaterThan(20);
   });
 
+  it('colors partially covered edge dots from the shape, never a fallback', () => {
+    const f = makeField(160, 160, 2, disc(60, [255, 55, 95]));
+    const l = latticeLayout(f, { gap: 6.5, shape: 'hex', mode: 'coverage', minCoverage: 0.04 });
+    for (let i = 0; i < l.count; i++) {
+      expect(l.color[i * 3 + 1]).toBeLessThan(0.5); // green channel of #ff375f, not white
+    }
+  });
+
   it('dithers in linear light: sRGB 188 (50% luminance) → half density', () => {
     const gap = 4;
     const f = makeField(120, 120, 2, square(50, [188, 188, 188]));

@@ -8,10 +8,21 @@ import { segmentRegions } from './regions';
 import { mulberry32 } from './random';
 
 
-/** Alpha-weighted average color around a raster point. */
+/**
+ * Alpha-weighted average color around a raster point. Edge dots whose
+ * center sits just outside the shape widen the search instead of guessing.
+ */
 function sampleColor(field, x, y, radius) {
+  for (const r of [radius, radius * 2.5, radius * 5]) {
+    const c = sampleColorAt(field, x, y, Math.min(12, r));
+    if (c) return c;
+  }
+  return [1, 1, 1];
+}
+
+function sampleColorAt(field, x, y, radius) {
   const { width: w, height: h, alpha, rgba } = field;
-  const rad = Math.max(1, Math.min(4, Math.round(radius)));
+  const rad = Math.max(1, Math.round(radius));
   const cx = Math.round(x - 0.5), cy = Math.round(y - 0.5);
   let r = 0, g = 0, b = 0, wsum = 0;
   for (let dy = -rad; dy <= rad; dy++) {
@@ -31,7 +42,7 @@ function sampleColor(field, x, y, radius) {
       wsum += wt;
     }
   }
-  if (wsum === 0) return [1, 1, 1];
+  if (wsum === 0) return null;
   return [r / wsum / 255, g / wsum / 255, b / wsum / 255];
 }
 

@@ -551,6 +551,79 @@
   padding: 12px 10px 20px;
 }
 
+.section-note {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.look {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  text-align: left;
+  transition: background 0.15s, box-shadow 0.15s, color 0.15s;
+}
+.look:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.look.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text);
+}
+.look-swatch {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background-color: #111;
+  background-size: 5px 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.look-studio {
+  background-image: radial-gradient(circle, #e8e8ee 1.1px, transparent 1.4px);
+}
+.look-minimal {
+  background-image: radial-gradient(circle, #9d9da8 1px, transparent 1.3px);
+}
+.look-neon {
+  background-image: radial-gradient(circle, #d7d2ff 0.9px, rgba(139, 124, 255, 0.55) 1.6px, transparent 2.5px);
+}
+.look-constellation {
+  background-size: 9px 9px;
+  background-image: radial-gradient(circle, #fff 0.8px, rgba(255, 255, 255, 0.25) 1.6px, transparent 2.2px);
+}
+.look-bokeh {
+  background-size: 8px 8px;
+  background-image: radial-gradient(circle, rgba(232, 232, 238, 0.9) 0.5px, rgba(232, 232, 238, 0.35) 2.2px, transparent 3.4px);
+}
+.look-led {
+  background-size: 5px 5px;
+  background-image: radial-gradient(circle, #ff5a5a 1.3px, transparent 1.6px);
+}
+.look-halftone {
+  background-size: 6px 6px;
+  background-image: radial-gradient(circle, #e8e8ee 2px, transparent 2.3px);
+}
+.look-dither {
+  background-size: 4px 4px;
+  background-image: linear-gradient(90deg, #e8e8ee 1px, transparent 1px), linear-gradient(#e8e8ee 1px, transparent 1px);
+  opacity: 0.8;
+}
+
 /* ── Overlays ────────────────────────────────────────── */
 
 .drop-overlay {
