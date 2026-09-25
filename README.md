@@ -21,6 +21,11 @@ embed. Inspired by [particl.art](https://particl.art) and
   - **Grid** — hexagonal or square dot matrix with coverage‑scaled edge dots.
   - **Halftone** — dot size follows tone, for gradients and multi‑color marks.
   - **Dither** — Floyd–Steinberg error diffusion on a centered lattice.
+
+  Tone is measured in linear light. With the logo's own colors, dots keep
+  their hue at full brightness and density carries the lightness, so the
+  average color matches the source; in solid or gradient mode, density
+  follows luminance.
 - **Color** — keep the logo's own colors (gradients included), use a solid
   color, or apply an OKLab gradient at any angle. Low‑contrast uploads are
   detected and switched to a readable color automatically.
@@ -45,6 +50,9 @@ embed. Inspired by [particl.art](https://particl.art) and
 npm install
 npm run dev
 ```
+
+Run the engine's unit tests (contours, layouts, color regions, color and
+motion math) with `npm test`.
 
 Drop an SVG anywhere on the page, paste SVG markup (⌘/Ctrl + V), or use
 **Upload SVG**. Settings persist between visits.

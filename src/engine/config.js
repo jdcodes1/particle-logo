@@ -65,3 +65,10 @@ export const RASTER_KEYS = ['aspect', 'logoScale'];
 export const LAYOUT_KEYS = [
   'layout', 'gap', 'gridShape', 'edgeInset', 'toneGamma', 'ditherThreshold', 'ditherInvert', 'seed',
 ];
+
+/** Tone-based layouts also depend on the color mode (see buildLayout). */
+export function layoutKeyOf(cfg) {
+  const keys = LAYOUT_KEYS.map((k) => String(cfg[k]));
+  if (cfg.layout === 'halftone' || cfg.layout === 'dither') keys.push(cfg.colorMode);
+  return keys.join('|');
+}

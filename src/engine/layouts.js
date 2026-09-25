@@ -35,9 +35,28 @@ function sampleColor(field, x, y, radius) {
   return [r / wsum / 255, g / wsum / 255, b / wsum / 255];
 }
 
-function luminance(field, i) {
+const LINEAR = Float32Array.from({ length: 256 }, (_, v) => {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+});
+const encode = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+
+/**
+ * Tone in linear light, so dot density reproduces brightness faithfully.
+ * 'luminance' suits single-color output; 'value' (brightest channel) pairs
+ * with full-value dot colors so density × color averages to the source.
+ */
+function tone(field, i, source) {
   const p = i * 4;
-  return (0.2126 * field.rgba[p] + 0.7152 * field.rgba[p + 1] + 0.0722 * field.rgba[p + 2]) / 255;
+  const r = LINEAR[field.rgba[p]], g = LINEAR[field.rgba[p + 1]], b = LINEAR[field.rgba[p + 2]];
+  return source === 'value' ? Math.max(r, g, b) : 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Same hue at full value (brightest channel = 1), computed in linear light. */
+function fullValue([r, g, b]) {
+  const lin = [r, g, b].map((c) => LINEAR[Math.round(c * 255)]);
+  const m = Math.max(...lin);
+  return m > 1e-4 ? lin.map((c) => encode(c / m)) : [1, 1, 1];
 }
 
 /** Summed-area table for O(1) box averages. */
@@ -62,7 +81,7 @@ function summedArea(values, w, h) {
   };
 }
 
-function finalize(field, raw) {
+function finalize(field, raw, { fullValueColors = false } = {}) {
   const n = raw.length;
   const home = new Float32Array(n * 2);
   const color = new Float32Array(n * 3);
@@ -76,7 +95,8 @@ function finalize(field, raw) {
     const y = stageH / 2 - p.y / ss;
     home[i * 2] = x;
     home[i * 2 + 1] = y;
-    const c = p.color || sampleColor(field, p.x, p.y, p.colorRadius ?? ss);
+    let c = p.color || sampleColor(field, p.x, p.y, p.colorRadius ?? ss);
+    if (fullValueColors) c = fullValue(c);
     color[i * 3] = c[0];
     color[i * 3 + 1] = c[1];
     color[i * 3 + 2] = c[2];
@@ -318,12 +338,15 @@ function relax(xs, ys, pinned, r, inside, iterations) {
  * Lattice layouts. `grid` scales edge particles by coverage (anti-aliased
  * halftone edges); `halftone` sizes every particle by tone (coverage × luma).
  */
-export function latticeLayout(field, { gap, shape = 'hex', mode = 'coverage', angle = 0, minCoverage = 0.1, gamma = 1 }) {
+export function latticeLayout(
+  field,
+  { gap, shape = 'hex', mode = 'coverage', angle = 0, minCoverage = 0.1, gamma = 1, toneSource = 'luminance' },
+) {
   const { width: W, height: H, ss, alpha, stageW, stageH } = field;
   const values = new Float32Array(W * H);
   if (mode === 'tone') {
     for (let i = 0; i < values.length; i++) {
-      values[i] = alpha[i] > 0 ? alpha[i] * Math.pow(luminance(field, i), 1 / gamma) : 0;
+      values[i] = alpha[i] > 0 ? alpha[i] * Math.pow(tone(field, i, toneSource), 1 / gamma) : 0;
     }
   } else {
     values.set(alpha);
@@ -359,20 +382,23 @@ export function latticeLayout(field, { gap, shape = 'hex', mode = 'coverage', an
       });
     }
   }
-  return finalize(field, raw);
+  return finalize(field, raw, { fullValueColors: mode === 'tone' && toneSource === 'value' });
 }
 
 /**
  * Floyd–Steinberg error diffusion on a square lattice. Tone is coverage ×
  * luminance, so flat colors resolve into evenly dithered densities.
  */
-export function ditherLayout(field, { gap, threshold = 0.5, gamma = 1, errorStrength = 1, serpentine = true, invert = false }) {
+export function ditherLayout(
+  field,
+  { gap, threshold = 0.5, gamma = 1, errorStrength = 1, serpentine = true, invert = false, toneSource = 'luminance' },
+) {
   const { width: W, height: H, ss, alpha, stageW, stageH } = field;
   const values = new Float32Array(W * H);
   for (let i = 0; i < values.length; i++) {
     const a = alpha[i];
     if (a <= 0) continue;
-    const l = luminance(field, i);
+    const l = tone(field, i, toneSource);
     values[i] = a * (invert ? 1 - l : l);
   }
   const box = summedArea(values, W, H);
@@ -382,7 +408,7 @@ export function ditherLayout(field, { gap, threshold = 0.5, gamma = 1, errorStre
   const cols = Math.floor(stageW / gap), rows = Math.floor(stageH / gap);
   const ox = (stageW - (cols - 1) * gap) / 2, oy = (stageH - (rows - 1) * gap) / 2;
   const half = (gap * ss) / 2;
-  const tone = new Float32Array(cols * rows);
+  const tones = new Float32Array(cols * rows);
   const covered = new Uint8Array(cols * rows);
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
@@ -390,7 +416,7 @@ export function ditherLayout(field, { gap, threshold = 0.5, gamma = 1, errorStre
       const c = cover(X - half, Y - half, X + half, Y + half);
       if (c < 0.04) continue;
       covered[j * cols + i] = 1;
-      tone[j * cols + i] = Math.pow(Math.min(1, box(X - half, Y - half, X + half, Y + half)), 1 / gamma);
+      tones[j * cols + i] = Math.pow(Math.min(1, box(X - half, Y - half, X + half, Y + half)), 1 / gamma);
     }
   }
 
@@ -400,7 +426,7 @@ export function ditherLayout(field, { gap, threshold = 0.5, gamma = 1, errorStre
     for (let s = 0; s < cols; s++) {
       const i = ltr ? s : cols - 1 - s;
       const idx = j * cols + i;
-      const old = tone[idx];
+      const old = tones[idx];
       const on = old >= threshold ? 1 : 0;
       const err = (old - on) * errorStrength;
       const dir = ltr ? 1 : -1;
@@ -408,7 +434,7 @@ export function ditherLayout(field, { gap, threshold = 0.5, gamma = 1, errorStre
         const ii = i + di * dir, jj = j + dj;
         if (ii < 0 || ii >= cols || jj >= rows) return;
         const t = jj * cols + ii;
-        if (covered[t]) tone[t] += err * w;
+        if (covered[t]) tones[t] += err * w;
       };
       push(1, 0, 7 / 16);
       push(-1, 1, 3 / 16);
@@ -419,7 +445,7 @@ export function ditherLayout(field, { gap, threshold = 0.5, gamma = 1, errorStre
       }
     }
   }
-  return finalize(field, raw);
+  return finalize(field, raw, { fullValueColors: toneSource === 'value' && !invert });
 }
 
 export const LAYOUTS = {
@@ -430,6 +456,7 @@ export const LAYOUTS = {
 };
 
 export function buildLayout(field, cfg) {
+  const toneSource = cfg.colorMode === 'original' ? 'value' : 'luminance';
   switch (cfg.layout) {
     case 'grid':
       return latticeLayout(field, { gap: cfg.gap, shape: cfg.gridShape, mode: 'coverage' });
@@ -441,6 +468,7 @@ export function buildLayout(field, cfg) {
         angle: cfg.gridShape === 'square' ? 45 : 0,
         minCoverage: 0.04,
         gamma: cfg.toneGamma,
+        toneSource,
       });
     case 'dither':
       return ditherLayout(field, {
@@ -448,6 +476,7 @@ export function buildLayout(field, cfg) {
         threshold: cfg.ditherThreshold,
         gamma: cfg.toneGamma,
         invert: cfg.ditherInvert,
+        toneSource,
       });
     case 'organic':
     default:

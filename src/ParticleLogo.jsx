@@ -2,7 +2,7 @@ import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ParticleEngine } from './engine/ParticleEngine';
 import { rasterizeSvg } from './engine/rasterize';
 import { createLayoutService, MissingFieldError } from './engine/layoutService';
-import { ASPECTS, LAYOUT_KEYS, RASTER_KEYS } from './engine/config';
+import { ASPECTS, RASTER_KEYS, layoutKeyOf } from './engine/config';
 import { exportPNG, exportSVG, exportVideo, exportHTML } from './engine/exporters';
 
 const keyOf = (cfg, keys) => keys.map((k) => String(cfg[k])).join('|');
@@ -82,7 +82,7 @@ export default function ParticleLogo({ svg, config, onStats, onError, className 
 
   // Structural: rasterize + layout, debounced so sliders stay responsive.
   const rasterKey = svg + '§' + keyOf(config, RASTER_KEYS);
-  const layoutKey = rasterKey + '§' + keyOf(config, LAYOUT_KEYS);
+  const layoutKey = rasterKey + '§' + layoutKeyOf(config);
   const configRef = useRef(config);
   useEffect(() => {
     configRef.current = config;
