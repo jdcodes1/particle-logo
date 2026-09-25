@@ -3,16 +3,6 @@
  * space and fits the visible content to the stage automatically.
  */
 
-function starPoints(cx, cy, outer, inner, points = 5) {
-  const out = [];
-  for (let i = 0; i < points * 2; i++) {
-    const r = i % 2 ? inner : outer;
-    const a = -Math.PI / 2 + (i * Math.PI) / points;
-    out.push(`${(cx + Math.cos(a) * r).toFixed(2)},${(cy + Math.sin(a) * r).toFixed(2)}`);
-  }
-  return out.join(' ');
-}
-
 export const PRESET_LOGOS = {
   linear: {
     name: 'Linear',
@@ -70,10 +60,17 @@ export const PRESET_LOGOS = {
   <path fill="#ff375f" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
 </svg>`,
   },
-  star: {
-    name: 'Star',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-  <polygon points="${starPoints(100, 106, 96, 40)}" fill="#ffd60a" stroke="#ffd60a" stroke-width="6" stroke-linejoin="round"/>
+  app: {
+    name: 'App Icon',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b7cff"/>
+      <stop offset="1" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="23" fill="url(#tile)"/>
+  <path fill="#ffffff" d="M57 13 L27 55 H47 L41 87 L73 42 H53 Z"/>
 </svg>`,
   },
 };

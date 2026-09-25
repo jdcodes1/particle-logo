@@ -4,7 +4,7 @@
  * regardless of display size or frame rate.
  */
 import { hexToRgb, rgbToHex } from './color';
-import { mulberry32 } from './layouts';
+import { mulberry32 } from './random';
 import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors } from './motion';
 import { particleRuntime } from './embedRuntime';
 import { particleVertex, dotFragment, glowFragment, backgroundVertex, backgroundFragment } from './shaders';

@@ -184,8 +184,12 @@ function arcDist(s, total, a, b) {
   return d >= 0 ? d : d + total;
 }
 
-/** Evenly resample the open polyline loop[from..to] (indices, wrapping). */
-function resampleSpan(loop, from, to, spacing, out, includeStart) {
+/**
+ * Evenly resample the polyline loop[from..to] (vertex indices, wrapping).
+ * Emits positions into `out` and, when given, interpolated unit normals
+ * into `outN`.
+ */
+function resampleSpan(loop, normals, from, to, spacing, out, outN, includeStart) {
   const n = loop.length / 2;
   const idx = [];
   for (let i = from; ; i = (i + 1) % n) {
@@ -213,38 +217,86 @@ function resampleSpan(loop, from, to, spacing, out, includeStart) {
       loop[a * 2] + (loop[b * 2] - loop[a * 2]) * t,
       loop[a * 2 + 1] + (loop[b * 2 + 1] - loop[a * 2 + 1]) * t,
     );
+    if (normals) {
+      const nx = normals[a * 2] + (normals[b * 2] - normals[a * 2]) * t;
+      const ny = normals[a * 2 + 1] + (normals[b * 2 + 1] - normals[a * 2 + 1]) * t;
+      const l = Math.hypot(nx, ny) || 1;
+      outN.push(nx / l, ny / l);
+    }
   }
 }
 
 /**
- * Resample all loops at `spacing` (raster px). Sharp corners are always kept.
- * Tiny loops collapse to their centroid. Returns flat [x, y, ...] points.
+ * Unit normals at each loop vertex, pointing into the shape (toward higher
+ * field values). Measured on the field the loop was traced from.
  */
-export function resampleContours(loops, spacing, { cornerAngle = 0.7 } = {}) {
+export function loopNormals(loop, field, w, h) {
+  const n = loop.length / 2;
+  const out = new Float64Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const x = loop[i * 2], y = loop[i * 2 + 1];
+    const gx = sampleField(field, w, h, x + 1, y) - sampleField(field, w, h, x - 1, y);
+    const gy = sampleField(field, w, h, x, y + 1) - sampleField(field, w, h, x, y - 1);
+    const l = Math.hypot(gx, gy);
+    if (l > 1e-6) {
+      out[i * 2] = gx / l;
+      out[i * 2 + 1] = gy / l;
+    }
+  }
+  // Light smoothing so pixel-level noise doesn't wobble the inset.
+  const sm = new Float64Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const p = (i - 1 + n) % n, q = (i + 1) % n;
+    const nx = out[p * 2] + 2 * out[i * 2] + out[q * 2];
+    const ny = out[p * 2 + 1] + 2 * out[i * 2 + 1] + out[q * 2 + 1];
+    const l = Math.hypot(nx, ny) || 1;
+    sm[i * 2] = nx / l;
+    sm[i * 2 + 1] = ny / l;
+  }
+  return sm;
+}
+
+/**
+ * Resample all loops at `spacing` (raster px). Sharp corners are always kept.
+ * Tiny loops collapse to their centroid. `normals` (optional) holds one
+ * array per loop from loopNormals(). Returns flat [x, y, ...] points, their
+ * normals, and the centroids of tiny loops.
+ */
+export function resampleContours(loops, spacing, { cornerAngle = 0.7, normals = null } = {}) {
   const out = [];
+  const outN = [];
   const singles = [];
-  for (const loop of loops) {
+  loops.forEach((loop, li) => {
+    const nrm = normals ? normals[li] : null;
     const len = loopLength(loop);
     if (len < spacing * 2.2) {
       singles.push(loopCentroid(loop));
-      continue;
+      return;
     }
+    const n = loop.length / 2;
     const corners = findCorners(loop, Math.max(1.5, spacing * 0.45), cornerAngle);
     if (corners.length === 0) {
       // Closed loop: sample from vertex 0 around back to itself.
-      const n = loop.length / 2;
       const closed = new Float64Array(loop.length + 2);
       closed.set(loop);
       closed[loop.length] = loop[0];
       closed[loop.length + 1] = loop[1];
-      resampleSpan(closed, 0, n, spacing, out, true);
+      let closedN = null;
+      if (nrm) {
+        closedN = new Float64Array(nrm.length + 2);
+        closedN.set(nrm);
+        closedN[nrm.length] = nrm[0];
+        closedN[nrm.length + 1] = nrm[1];
+      }
+      resampleSpan(closed, closedN, 0, n, spacing, out, outN, true);
     } else {
       for (let c = 0; c < corners.length; c++) {
         const from = corners[c];
-        const to = corners[(c + 1) % corners.length];
-        resampleSpan(loop, from, to === from ? (from - 1 + loop.length / 2) % (loop.length / 2) : to, spacing, out, true);
+        const next = corners[(c + 1) % corners.length];
+        const to = next === from ? (from - 1 + n) % n : next;
+        resampleSpan(loop, nrm, from, to, spacing, out, outN, true);
       }
     }
-  }
-  return { points: out, singles };
+  });
+  return { points: out, normals: outN, singles };
 }

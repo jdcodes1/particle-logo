@@ -13,7 +13,7 @@ import {
   backgroundFragment,
 } from './shaders';
 import { hexToRgb, mixOklab } from './color';
-import { mulberry32 } from './layouts';
+import { mulberry32 } from './random';
 import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors } from './motion';
 
 /* ── Intro choreography ─────────────────────────────────────────────── */

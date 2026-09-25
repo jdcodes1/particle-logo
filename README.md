@@ -13,6 +13,8 @@ embed. Inspired by [particl.art](https://particl.art) and
   trimmed to its visible content and fit to the stage without distortion.
   Outlines are traced with marching squares and lined with evenly spaced
   particles (sharp corners are pinned), so edges stay clean at any density.
+  Multi-color marks are split into color regions, and every hard internal
+  color edge gets the same crisp treatment — while gradients stay smooth.
 - **Four layouts**
   - **Organic** — contour particles plus a relaxed blue‑noise fill: calm,
     even and still clearly made of particles.
@@ -79,10 +81,13 @@ The canvas fills its parent while keeping the stage's aspect ratio. See
    viewBox), find its visible bounds, and draw it into a coverage + color
    field. Opaque, uniform backdrops are keyed out with edge color
    decontamination.
-2. **Layout** (`engine/layouts.js`, `engine/contours.js`) — trace iso‑contours,
-   resample them evenly with corners pinned, inset them by a fraction of the
-   spacing, then grow a Poisson‑disk fill and relax it with short‑range
-   repulsion. Lattice layouts use summed‑area tables for exact coverage.
+2. **Layout** (`engine/layouts.js`, `engine/contours.js`,
+   `engine/regions.js`) — split multi-color logos into regions (k‑means,
+   then merge clusters whose shared boundary is a smooth gradient), trace
+   each region's iso‑contours, resample them evenly with corners pinned and
+   inset them, then grow a Poisson‑disk fill, relax it with short‑range
+   repulsion and plug any remaining voids. Lattice layouts use summed‑area
+   tables for exact coverage.
 3. **Render** (`engine/ParticleEngine.js`, `engine/shaders.js`) — three.js
    `Points` with analytic anti‑aliasing and premultiplied alpha. Intros,
    morphs, idle motion, sheen and lens are evaluated on the GPU; only pointer

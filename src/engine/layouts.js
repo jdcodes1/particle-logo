@@ -3,19 +3,10 @@
  * returns particle home positions in stage units (origin at center, y up),
  * source colors and a per-particle size scale.
  */
-import { traceContours, resampleContours, sampleField } from './contours';
+import { traceContours, resampleContours, sampleField, loopNormals } from './contours';
+import { segmentRegions } from './regions';
+import { mulberry32 } from './random';
 
-/** Small, fast, seedable PRNG so layouts are identical on every run. */
-export function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 /** Alpha-weighted average color around a raster point. */
 function sampleColor(field, x, y, radius) {
@@ -107,6 +98,24 @@ function finalize(field, raw) {
 }
 
 /**
+ * Outlines to trace: the silhouette, or — when the logo has several flat
+ * color regions — the boundary of every region. Each set carries its loops
+ * and per-vertex inward normals.
+ */
+function traceOutlines(field) {
+  const { width: W, height: H, alpha } = field;
+  const regions = segmentRegions(field);
+  const trace = (f, region) => {
+    const loops = traceContours(f, W, H, 0.5);
+    return { region, loops, normals: loops.map((l) => loopNormals(l, f, W, H)) };
+  };
+  if (!regions) return { regionMap: null, sets: [trace(alpha, -1)] };
+  const sets = [];
+  for (let r = 0; r < regions.count; r++) sets.push(trace(regions.mask(r), r));
+  return { regionMap: regions.regionMap, sets };
+}
+
+/**
  * Organic: evenly spaced particles traced along every contour (so edges stay
  * crisp) and a blue-noise (Poisson disk) fill for the interior.
  */
@@ -116,12 +125,15 @@ export function organicLayout(field, { gap, edgeInset = 0.35, seed = 7, relaxIte
   const rng = mulberry32(seed);
   const at = (x, y) => sampleField(alpha, W, H, x, y);
 
-  // Spatial hash sized so each cell holds at most one point.
+  // Bucketed spatial hash (cell = r) for minimum-distance queries.
   const seedDist = r * 0.72;
-  const cell = seedDist / Math.SQRT2;
+  const cell = r;
   const gw = Math.ceil(W / cell) + 1, gh = Math.ceil(H / cell) + 1;
-  const grid = new Int32Array(gw * gh).fill(-1);
+  const head = new Int32Array(gw * gh).fill(-1);
+  const next = [];
   const xs = [], ys = [], edgeFlags = [];
+  const cellOf = (x, y) =>
+    Math.min(gh - 1, Math.max(0, Math.floor(y / cell))) * gw + Math.min(gw - 1, Math.max(0, Math.floor(x / cell)));
 
   const fits = (x, y, minD) => {
     const gx = Math.floor(x / cell), gy = Math.floor(y / cell);
@@ -129,50 +141,67 @@ export function organicLayout(field, { gap, edgeInset = 0.35, seed = 7, relaxIte
     const m2 = minD * minD;
     for (let j = Math.max(0, gy - reach); j <= Math.min(gh - 1, gy + reach); j++) {
       for (let i = Math.max(0, gx - reach); i <= Math.min(gw - 1, gx + reach); i++) {
-        const k = grid[j * gw + i];
-        if (k < 0) continue;
-        const dx = xs[k] - x, dy = ys[k] - y;
-        if (dx * dx + dy * dy < m2) return false;
+        for (let k = head[j * gw + i]; k >= 0; k = next[k]) {
+          const dx = xs[k] - x, dy = ys[k] - y;
+          if (dx * dx + dy * dy < m2) return false;
+        }
       }
     }
     return true;
   };
   const insert = (x, y, isEdge) => {
-    const gi = Math.floor(y / cell) * gw + Math.floor(x / cell);
-    if (grid[gi] >= 0) return -1;
     const k = xs.length;
+    const c = cellOf(x, y);
     xs.push(x);
     ys.push(y);
     edgeFlags.push(isEdge);
-    grid[gi] = k;
+    next.push(head[c]);
+    head[c] = k;
     return k;
   };
-
-  // 1. Contour particles, inset along the coverage gradient.
-  // Contours only depend on the field, so they're traced once and reused
-  // while spacing or inset sliders move.
-  const loops = field.contours || (field.contours = traceContours(alpha, W, H, 0.5));
-  const { points, singles } = resampleContours(loops, r);
-  const inset = gap * edgeInset * ss;
-  for (let i = 0; i < points.length; i += 2) {
-    const x = points[i], y = points[i + 1];
-    const gx = at(x + 1, y) - at(x - 1, y);
-    const gy = at(x, y + 1) - at(x, y - 1);
-    const len = Math.hypot(gx, gy);
-    if (len < 1e-5) continue;
-    const nx = gx / len, ny = gy / len;
-    let px = x + nx * inset, py = y + ny * inset;
-    if (at(px, py) < 0.5) {
-      // Thin feature: fall back to a shallower inset.
-      px = x + nx * inset * 0.4;
-      py = y + ny * inset * 0.4;
-      if (at(px, py) < 0.5) continue;
+  const rehash = () => {
+    head.fill(-1);
+    for (let k = 0; k < xs.length; k++) {
+      const c = cellOf(xs[k], ys[k]);
+      next[k] = head[c];
+      head[c] = k;
     }
-    if (px < 0 || py < 0 || px >= W || py >= H) continue;
-    if (fits(px, py, seedDist)) insert(px, py, true);
-  }
-  for (const [x, y] of singles) {
-    if (at(x, y) >= 0.5 && fits(x, y, seedDist)) insert(x, y, true);
+  };
+
+  // 1. Contour particles along every outline — the silhouette and, for
+  //    multi-color logos, each hard internal color edge — inset along the
+  //    outline normal. Outlines only depend on the field, so they're traced
+  //    once and reused while the spacing or inset sliders move.
+  const outlines = field.outlines || (field.outlines = traceOutlines(field));
+  const { regionMap } = outlines;
+  const regionAt = (x, y) =>
+    regionMap[Math.min(H - 1, Math.max(0, Math.floor(y))) * W + Math.min(W - 1, Math.max(0, Math.floor(x)))];
+  const edgeInsetPx = gap * edgeInset * ss;
+  // Color edges sit midway between the two regions' rows, one spacing apart.
+  const colorInsetPx = r * 0.5;
+
+  for (const set of outlines.sets) {
+    const { points, normals, singles } = resampleContours(set.loops, r, { normals: set.normals });
+    const inside = (x, y) => at(x, y) >= 0.5 && (!regionMap || regionAt(x, y) === set.region);
+    for (let i = 0; i < points.length; i += 2) {
+      const x = points[i], y = points[i + 1];
+      const nx = normals[i], ny = normals[i + 1];
+      if (!nx && !ny) continue;
+      const silhouette = at(x - nx * 2, y - ny * 2) < 0.5;
+      const inset = silhouette ? edgeInsetPx : colorInsetPx;
+      let px = x + nx * inset, py = y + ny * inset;
+      if (!inside(px, py)) {
+        // Thin feature: fall back to a shallower inset.
+        px = x + nx * inset * 0.4;
+        py = y + ny * inset * 0.4;
+        if (!inside(px, py)) continue;
+      }
+      if (px < 0 || py < 0 || px >= W || py >= H) continue;
+      if (fits(px, py, seedDist)) insert(px, py, true);
+    }
+    for (const [x, y] of singles) {
+      if (inside(x, y) && fits(x, y, seedDist)) insert(x, y, true);
+    }
   }
 
   // 2. Poisson-disk interior fill, grown from the contour seeds.
@@ -187,38 +216,41 @@ export function organicLayout(field, { gap, edgeInset = 0.35, seed = 7, relaxIte
       }
     }
   }
-  const K = 24;
-  const eps = 1e-4;
-  while (active.length) {
-    const ai = Math.floor(rng() * active.length);
-    const k = active[ai];
-    const ox = xs[k], oy = ys[k];
-    const base = rng();
-    let found = false;
-    for (let j = 0; j < K; j++) {
-      const theta = 2 * Math.PI * (base + j / K);
-      const rad = r + eps;
-      const cx = ox + Math.cos(theta) * rad;
-      const cy = oy + Math.sin(theta) * rad;
-      if (cx < 0 || cy < 0 || cx >= W || cy >= H) continue;
-      if (at(cx, cy) < 0.5) continue;
-      if (!fits(cx, cy, r)) continue;
-      const idx = insert(cx, cy, false);
-      if (idx < 0) continue;
-      active.push(idx);
-      found = true;
-      break;
+  const grow = (queue, minD) => {
+    const K = 24;
+    while (queue.length) {
+      const ai = Math.floor(rng() * queue.length);
+      const k = queue[ai];
+      const ox = xs[k], oy = ys[k];
+      const base = rng();
+      let found = false;
+      for (let j = 0; j < K; j++) {
+        const theta = 2 * Math.PI * (base + j / K);
+        const cx = ox + Math.cos(theta) * (minD + 1e-4);
+        const cy = oy + Math.sin(theta) * (minD + 1e-4);
+        if (cx < 0 || cy < 0 || cx >= W || cy >= H) continue;
+        if (at(cx, cy) < 0.5 || !fits(cx, cy, minD)) continue;
+        queue.push(insert(cx, cy, false));
+        found = true;
+        break;
+      }
+      if (!found) {
+        queue[ai] = queue[queue.length - 1];
+        queue.pop();
+      }
     }
-    if (!found) {
-      active[ai] = active[active.length - 1];
-      active.pop();
-    }
-  }
+  };
+  grow(active, r);
 
   // 3. Relax the interior: short-range repulsion evens out the irregular
   //    gaps Poisson sampling leaves behind, giving a calm, uniform texture
-  //    that still reads as organic. Contour particles stay pinned.
+  //    that still reads as organic. Contour particles stay pinned. A second,
+  //    slightly tighter fill then plugs any voids the relaxation opened up.
   relax(xs, ys, edgeFlags, r, at, relaxIterations);
+  rehash();
+  const before = xs.length;
+  grow(xs.map((_, i) => i), r * 0.9);
+  if (xs.length > before) relax(xs, ys, edgeFlags, r, at, Math.ceil(relaxIterations / 2));
 
   const raw = xs.map((x, i) => ({ x, y: ys[i], edge: edgeFlags[i], colorRadius: Math.min(2, r * 0.3) }));
   return finalize(field, raw);
