@@ -6,7 +6,7 @@
  * motion helpers are passed in through `lib`.
  */
 export function particleRuntime(canvas, data, lib) {
-  const { shaders, advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors } = lib;
+  const { shaders, advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors, stepTilt } = lib;
   const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false });
   if (!gl) return null;
 
@@ -123,6 +123,7 @@ export function particleRuntime(canvas, data, lib) {
   const base = cfg.background;
   const spot = spotlightColors(base);
   const pointer = { x: 1e5, y: 1e5, sx: 1e5, sy: 1e5, vx: 0, vy: 0, active: false, amt: 0 };
+  const tilt = { x: 0, y: 0 };
   let W = 1, H = 1, pxPerUnit = 1, projection = identity;
   let time = 0, introTime = reduce ? 1e4 : 0, awake = false, playing = false, visible = true, frame = 0, last = 0;
 
@@ -188,6 +189,8 @@ export function particleRuntime(canvas, data, lib) {
       uSheenWidth: sheenWidth,
       uSoftness: cfg.softness,
       uGlow: cfg.glow,
+      uTilt: [tilt.x, tilt.y],
+      uFocal: Math.max(stage.w, stage.h) * 1.6,
     };
     gl.viewport(0, 0, W, H);
     gl.clearColor(0, 0, 0, 0);
@@ -233,6 +236,7 @@ export function particleRuntime(canvas, data, lib) {
       introTime += dt;
     }
     advancePointer(pointer, dt);
+    stepTilt(tilt, pointer, stage, reduce ? 0 : cfg.tilt, dt);
     if (awake) {
       const energy = stepSprings(offset, vel, home, 3, n, pointer, cfg, dt);
       gl.bindBuffer(gl.ARRAY_BUFFER, attrs.aOffset[0]);

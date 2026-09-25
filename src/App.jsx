@@ -489,6 +489,7 @@ export default function App() {
           <Slider label="Swirl" value={config.swirl} min={-1} max={1} step={0.05} onChange={(v) => set('swirl', v)} format={(v) => v.toFixed(2)} />
           <Slider label="Drag" value={config.drag} min={0} max={1.5} step={0.05} onChange={(v) => set('drag', v)} format={(v) => v.toFixed(2)} hint="How much particles follow the cursor's motion" />
           <Slider label="Lens" value={config.lens} min={0} max={1.5} step={0.05} onChange={(v) => set('lens', v)} format={pct} hint="Magnify particles under the cursor" />
+          <Slider label="Tilt" value={config.tilt} min={0} max={1} step={0.05} onChange={(v) => set('tilt', v)} format={pct} hint="Lean the logo toward the pointer in 3D" />
           <Slider label="Spring" value={config.spring} min={0.01} max={0.2} step={0.005} onChange={(v) => set('spring', v)} format={(v) => v.toFixed(3)} />
           <Slider label="Damping" value={config.damping} min={0.6} max={0.97} step={0.01} onChange={(v) => set('damping', v)} format={(v) => v.toFixed(2)} />
           <Toggle label="Click burst" checked={config.clickBurst} onChange={(v) => set('clickBurst', v)} />

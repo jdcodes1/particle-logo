@@ -54,6 +54,7 @@ export const DEFAULT_CONFIG = {
   spring: 0.055,
   damping: 0.84,
   lens: 0.3,
+  tilt: 0.4,
   clickBurst: true,
 };
 

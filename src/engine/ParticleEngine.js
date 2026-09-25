@@ -14,7 +14,7 @@ import {
 } from './shaders';
 import { hexToRgb, mixOklab } from './color';
 import { mulberry32 } from './random';
-import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors } from './motion';
+import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors, stepTilt } from './motion';
 
 /* ── Intro choreography ─────────────────────────────────────────────── */
 
@@ -141,6 +141,8 @@ function createUniforms() {
     uSheenWidth: { value: 60 },
     uSoftness: { value: 0 },
     uGlow: { value: 0 },
+    uTilt: { value: new THREE.Vector2(0, 0) },
+    uFocal: { value: 2000 },
   };
 }
 
@@ -282,6 +284,7 @@ export class ParticleEngine {
     this.transition = INTRO_STYLES.none;
     this.transitionEnd = 0;
     this.pointer = { x: 1e5, y: 1e5, sx: 1e5, sy: 1e5, vx: 0, vy: 0, active: false, amt: 0 };
+    this.tilt = { x: 0, y: 0 };
     this.awake = false;
     this.last = performance.now();
     this.frame = requestAnimationFrame(this.tick);
@@ -567,6 +570,8 @@ export class ParticleEngine {
     u.uIntroTime.value = this.introTime;
     u.uPointer.value.set(this.pointer.sx, this.pointer.sy);
     u.uPointerAmt.value = this.pointer.amt;
+    stepTilt(this.tilt, this.pointer, this.stage, this.cfg.tilt, dt);
+    u.uTilt.value.set(this.tilt.x, this.tilt.y);
     updateSheen(u, this.cfg, this.layout, this.introTime - this.transitionEnd);
     this.renderer.render(this.view.scene, this.view.camera);
   };
@@ -785,6 +790,7 @@ function applyUniforms(view, cfg, stage) {
   u.uSheen.value = cfg.sheen;
   u.uSheenWidth.value = Math.max(stage.w, stage.h) * 0.06;
   u.uGlow.value = cfg.glow;
+  u.uFocal.value = Math.max(stage.w, stage.h) * 1.6;
   view.materials.glow.uniforms.uSizeMul.value = cfg.glowSize;
   if (view.glowPoints) view.glowPoints.visible = cfg.glow > 0 || cfg.sheen > 0;
 

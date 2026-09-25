@@ -5,7 +5,7 @@
  */
 import { hexToRgb, rgbToHex } from './color';
 import { mulberry32 } from './random';
-import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors } from './motion';
+import { advancePointer, stepSprings, applyBurst, sheenPosition, spotlightColors, stepTilt } from './motion';
 import { particleRuntime } from './embedRuntime';
 import { particleVertex, dotFragment, glowFragment, backgroundVertex, backgroundFragment } from './shaders';
 
@@ -140,7 +140,7 @@ export function exportHTML(engine, { transparent = false, title = 'Particle logo
   const keys = [
     'dotSize', 'sizeVariance', 'brightnessVariance', 'softness', 'glow', 'glowSize', 'spotlight', 'idle',
     'twinkle', 'sheen', 'sheenInterval', 'repelRadius', 'repelStrength', 'swirl', 'drag', 'spring',
-    'damping', 'lens', 'clickBurst',
+    'damping', 'lens', 'tilt', 'clickBurst',
   ];
   const data = {
     count: n,
@@ -170,7 +170,8 @@ export function exportHTML(engine, { transparent = false, title = 'Particle logo
   stepSprings: ${stepSprings.toString()},
   applyBurst: ${applyBurst.toString()},
   sheenPosition: ${sheenPosition.toString()},
-  spotlightColors: ${spotlightColors.toString()}
+  spotlightColors: ${spotlightColors.toString()},
+  stepTilt: ${stepTilt.toString()}
 }`;
   const bg = transparent ? 'transparent' : cfg.background;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);

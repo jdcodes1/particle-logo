@@ -45,6 +45,9 @@ export const particleVertex = /* glsl */ `
   uniform vec2 uSheenDir;
   uniform float uSheenWidth;
 
+  uniform vec2 uTilt;
+  uniform float uFocal;
+
   varying vec3 vColor;
   varying float vAlpha;
   varying float vPx;
@@ -98,6 +101,17 @@ export const particleVertex = /* glsl */ `
 
     col = col * bright;
     col = mix(col, vec3(1.0), clamp(sheen * 0.55 + lens * uLens * 0.12, 0.0, 1.0));
+
+    // Parallax tilt: the logo plane leans toward the pointer and is seen
+    // through a gentle perspective. Untilted (and in every export) this is
+    // an exact identity, so layouts stay pixel-true.
+    float cy = cos(uTilt.y), sy = sin(uTilt.y);
+    vec3 q = vec3(cy * p.x, p.y, -sy * p.x);
+    float cx = cos(uTilt.x), sx = sin(uTilt.x);
+    q = vec3(q.x, cx * q.y - sx * q.z, sx * q.y + cx * q.z);
+    float persp = uFocal / (uFocal - q.z);
+    p = q.xy * persp;
+    size *= persp;
 
     float alpha = mix(1.0, smoothstep(0.0, 0.45, t), uFadeIn);
     float px = size * uPxPerUnit * uSizeMul;

@@ -66,6 +66,25 @@ export function stepSprings(off, vel, home, stride, count, p, cfg, dt) {
   return energy;
 }
 
+/**
+ * Ease the parallax tilt (radians) toward the pointer: the side under the
+ * pointer leans away, up to ~11° at full strength; it relaxes back when the
+ * pointer leaves.
+ */
+export function stepTilt(tilt, p, stage, amount, dt) {
+  const max = 0.2 * amount;
+  let tx = 0, ty = 0;
+  if (p.active && amount > 0) {
+    const nx = Math.max(-1, Math.min(1, p.sx / (stage.w / 2)));
+    const ny = Math.max(-1, Math.min(1, p.sy / (stage.h / 2)));
+    ty = nx * max;
+    tx = -ny * max;
+  }
+  const k = 1 - Math.exp(-dt * (p.active ? 4 : 2.5));
+  tilt.x += (tx - tilt.x) * k;
+  tilt.y += (ty - tilt.y) * k;
+}
+
 /** Radial impulse (click burst). */
 export function applyBurst(off, vel, home, stride, count, x, y, radius, strength) {
   for (let i = 0; i < count; i++) {
