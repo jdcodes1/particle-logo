@@ -180,6 +180,13 @@
 .exit-present:focus-visible {
   opacity: 1;
 }
+.app.presenting.idle,
+.app.presenting.idle .particle-canvas {
+  cursor: none;
+}
+.app.presenting.idle .exit-present {
+  opacity: 0;
+}
 
 /* ── Panel ───────────────────────────────────────────── */
 
@@ -600,8 +607,11 @@
     height: auto;
   }
   .workspace {
-    height: 78vh;
-    height: 78svh;
+    height: auto;
+  }
+  .stage {
+    aspect-ratio: var(--stage-aspect, 1);
+    max-height: 80svh;
   }
   .topbar {
     grid-template-columns: auto 1fr;

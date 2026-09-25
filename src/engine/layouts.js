@@ -149,7 +149,9 @@ export function organicLayout(field, { gap, edgeInset = 0.35, seed = 7, relaxIte
   };
 
   // 1. Contour particles, inset along the coverage gradient.
-  const loops = traceContours(alpha, W, H, 0.5);
+  // Contours only depend on the field, so they're traced once and reused
+  // while spacing or inset sliders move.
+  const loops = field.contours || (field.contours = traceContours(alpha, W, H, 0.5));
   const { points, singles } = resampleContours(loops, r);
   const inset = gap * edgeInset * ss;
   for (let i = 0; i < points.length; i += 2) {

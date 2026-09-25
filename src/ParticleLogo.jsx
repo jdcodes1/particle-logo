@@ -68,6 +68,14 @@ export default function ParticleLogo({ svg, config, onStats, onError, className 
     engineRef.current?.setConfig(config);
   }, [config]);
 
+  // Picking a different intro previews it right away.
+  const introRef = useRef(config.intro);
+  useEffect(() => {
+    if (introRef.current === config.intro) return;
+    introRef.current = config.intro;
+    engineRef.current?.replay();
+  }, [config.intro]);
+
   // Structural: rasterize + layout, debounced so sliders stay responsive.
   const rasterKey = svg + '§' + keyOf(config, RASTER_KEYS);
   const layoutKey = rasterKey + '§' + keyOf(config, LAYOUT_KEYS);

@@ -7,6 +7,7 @@ import { INTRO_STYLES } from './engine/ParticleEngine';
 import { LAYOUTS } from './engine/layouts';
 import { contrastRatio, hexToRgb } from './engine/color';
 import { download } from './engine/exporters';
+import { parseSvg } from './engine/rasterize';
 import { Section, Slider, Segmented, Toggle, ColorField, Select } from './components/Controls';
 import {
   ReplayIcon, ExpandIcon, UploadIcon, DownloadIcon, ShuffleIcon, ResetIcon, CloseIcon, CodeIcon,
@@ -55,6 +56,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const [presenting, setPresenting] = useState(false);
+  const [pointerIdle, setPointerIdle] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -96,8 +98,11 @@ export default function App() {
   }, [config, source]);
 
   const loadCustom = useCallback((text, name = 'custom') => {
-    if (!isSvgText(text)) {
-      notify('That doesn’t look like SVG markup.', 'error');
+    try {
+      if (!isSvgText(text)) throw new Error('That doesn’t look like SVG markup.');
+      parseSvg(text);
+    } catch (err) {
+      notify(err.message, 'error');
       return;
     }
     contrastCheck.current = true;
@@ -127,17 +132,43 @@ export default function App() {
     });
   }, [notify]);
 
+  // Present mode: go fullscreen when possible and hide the cursor when idle.
+  useEffect(() => {
+    if (!presenting) return;
+    const root = document.documentElement;
+    if (!document.fullscreenElement && root.requestFullscreen) root.requestFullscreen().catch(() => {});
+    let timer = setTimeout(() => setPointerIdle(true), 2500);
+    const onMove = () => {
+      setPointerIdle(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => setPointerIdle(true), 2500);
+    };
+    const onFullscreen = () => {
+      if (!document.fullscreenElement) setPresenting(false);
+    };
+    window.addEventListener('pointermove', onMove);
+    document.addEventListener('fullscreenchange', onFullscreen);
+    return () => {
+      clearTimeout(timer);
+      setPointerIdle(false);
+      window.removeEventListener('pointermove', onMove);
+      document.removeEventListener('fullscreenchange', onFullscreen);
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    };
+  }, [presenting]);
+
   // Global shortcuts, paste and drag & drop.
   useEffect(() => {
+    const inField = (e, selector) => e.target instanceof Element && e.target.closest(selector);
     const onKey = (e) => {
-      if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+      if (inField(e, 'input, textarea, select, [contenteditable]')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'r' || e.key === 'R') logoRef.current?.replay();
       else if (e.key === 'f' || e.key === 'F') setPresenting((p) => !p);
       else if (e.key === 'Escape') setPresenting(false);
     };
     const onPaste = (e) => {
-      if (e.target.closest('input, textarea')) return;
+      if (inField(e, 'input, textarea')) return;
       const text = e.clipboardData?.getData('text/plain');
       if (text && isSvgText(text)) {
         e.preventDefault();
@@ -206,7 +237,7 @@ export default function App() {
 
   return (
     <div
-      className={`app ${presenting ? 'presenting' : ''}`}
+      className={`app ${presenting ? 'presenting' : ''} ${presenting && pointerIdle ? 'idle' : ''}`}
       onDragOver={(e) => {
         if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
         e.preventDefault();
@@ -259,7 +290,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="stage" style={{ '--stage-bg': config.background }}>
+        <div className="stage" style={{ '--stage-bg': config.background, '--stage-aspect': `${stage.w} / ${stage.h}` }}>
           <ParticleLogo
             ref={logoRef}
             svg={svg}
@@ -438,10 +469,7 @@ export default function App() {
           <Segmented
             label="Intro"
             value={config.intro}
-            onChange={(v) => {
-              set('intro', v);
-              setTimeout(() => logoRef.current?.replay(), 0);
-            }}
+            onChange={(v) => set('intro', v)}
             columns={3}
             options={Object.entries(INTRO_STYLES).map(([value, s]) => ({ value, label: s.name }))}
           />
