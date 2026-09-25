@@ -297,6 +297,7 @@ export default function App() {
             config={config}
             onStats={onStats}
             onError={setError}
+            label={`${sourceName} logo made of particles`}
             className="stage-canvas"
           />
           {presenting && (

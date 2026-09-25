@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ParticleEngine } from './engine/ParticleEngine';
 import { rasterizeSvg } from './engine/rasterize';
-import { buildLayout } from './engine/layouts';
+import { createLayoutService, MissingFieldError } from './engine/layoutService';
 import { ASPECTS, LAYOUT_KEYS, RASTER_KEYS } from './engine/config';
 import { exportPNG, exportSVG, exportVideo, exportHTML } from './engine/exporters';
 
@@ -16,11 +16,11 @@ const keyOf = (cfg, keys) => keys.map((k) => String(cfg[k])).join('|');
  *  - onStats({ count }), onError(message | null)
  *  - ref: { replay(), exportPNG(opts), exportSVG(opts), exportVideo(opts), exportHTML(opts) }
  */
-export default function ParticleLogo({ svg, config, onStats, onError, className = '', ref }) {
+export default function ParticleLogo({ svg, config, onStats, onError, className = '', label = 'Particle logo', ref }) {
   const frameRef = useRef(null);
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
-  const fieldRef = useRef({ key: null, field: null });
+  const serviceRef = useRef(null);
   const layoutKeyRef = useRef(null);
   const callbacks = useRef({ onStats, onError });
   const [status, setStatus] = useState('loading');
@@ -38,9 +38,13 @@ export default function ParticleLogo({ svg, config, onStats, onError, className 
       onStats: (s) => callbacks.current.onStats?.(s),
     });
     engineRef.current = engine;
+    const service = createLayoutService();
+    serviceRef.current = service;
     return () => {
       engine.dispose();
+      service.dispose();
       engineRef.current = null;
+      serviceRef.current = null;
     };
   }, []);
 
@@ -88,17 +92,27 @@ export default function ParticleLogo({ svg, config, onStats, onError, className 
     let cancelled = false;
     const timer = setTimeout(async () => {
       const engine = engineRef.current;
-      if (!engine) return;
+      const service = serviceRef.current;
+      if (!engine || !service) return;
       const cfg = configRef.current;
       const st = ASPECTS[cfg.aspect] || ASPECTS['1:1'];
+      const ensureField = async (force) => {
+        if (!force && service.has(rasterKey)) return;
+        const field = await rasterizeSvg(svg, { stageW: st.w, stageH: st.h, logoScale: cfg.logoScale, supersample: 2 });
+        if (!cancelled) service.addField(rasterKey, field);
+      };
       try {
-        let field = fieldRef.current.key === rasterKey ? fieldRef.current.field : null;
-        if (!field) {
-          field = await rasterizeSvg(svg, { stageW: st.w, stageH: st.h, logoScale: cfg.logoScale, supersample: 2 });
+        await ensureField(false);
+        if (cancelled) return;
+        let layout;
+        try {
+          layout = await service.layout(rasterKey, cfg);
+        } catch (err) {
+          if (!(err instanceof MissingFieldError) || cancelled) throw err;
+          await ensureField(true);
           if (cancelled) return;
-          fieldRef.current = { key: rasterKey, field };
+          layout = await service.layout(rasterKey, cfg);
         }
-        const layout = buildLayout(field, cfg);
         if (cancelled) return;
         if (!layout.count) throw new Error('No visible particles — try a denser setting');
         engine.setStage(st.w, st.h);
@@ -144,6 +158,8 @@ export default function ParticleLogo({ svg, config, onStats, onError, className 
       <canvas
         ref={canvasRef}
         className="particle-canvas"
+        role="img"
+        aria-label={label}
         style={{ width: box.w, height: box.h }}
         onPointerMove={(e) => engineRef.current?.pointerMove(...toStage(e))}
         onPointerLeave={() => engineRef.current?.pointerLeave()}
