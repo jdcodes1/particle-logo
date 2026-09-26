@@ -112,8 +112,9 @@ The canvas fills its parent while keeping the stage's aspect ratio. See
    inlines a small WebGL runtime (`engine/embedRuntime.js`) that reuses the
    same shaders and motion code.
 
-The longer story, with measurements and figures, is in
-[docs/writeup/post.md](docs/writeup/post.md).
+The longer story, with measurements and figures:
+[Making particle logos that survive a real export](https://particle-logo.vercel.app/writeup/)
+(source in [docs/writeup/post.md](docs/writeup/post.md)).
 
 ### Batch rendering from the command line
 

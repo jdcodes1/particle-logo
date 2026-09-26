@@ -1,10 +1,12 @@
 # Making particle logos that survive a real export
 
+*Published at [particle-logo.vercel.app/writeup](https://particle-logo.vercel.app/writeup/). This file is the source; figures live in `public/writeup/fig`.*
+
 Particle logos are easy to demo and hard to ship. The usual recipe samples the logo on a pixel grid at display size: walk the cells, drop a dot wherever the shape is filled. It looks fine in a tweet. Export it at 4K for a keynote slide and every shortcut shows. Edges turn into staircases, the interior is a visible lattice, gradients band, and small counters fill in or vanish depending on where the grid happened to land.
 
 I rebuilt the pipeline behind [Particle Logo](https://particle-logo.vercel.app) (MIT, [source on GitHub](https://github.com/jdcodes1/particle-logo)) so the output holds up at print resolution. This is what changed, in the order the pixels go through it.
 
-![Grid sampling on the left, traced outline plus Poisson fill on the right](fig/fig-before-after-crop.png)
+![Grid sampling on the left, traced outline plus Poisson fill on the right](https://particle-logo.vercel.app/writeup/fig/fig-before-after-crop.png)
 
 *Left: grid sampling. Right: the same mark, traced. Same spacing, same dot size.*
 
@@ -18,7 +20,7 @@ Corners matter more than anything else on a logo. The tracer measures the turnin
 
 The outline row is inset along the inward normal by a fraction of the spacing (0.35 by default). A dot whose centre sits on the outline reads as fat; insetting puts the dot's edge on the outline instead. Thin strokes without room for the full inset get 40% of it. Loops shorter than about two spacings, like the dot on an i, collapse to a single particle at their centroid rather than a broken ring.
 
-![A corner from a 4K PNG export](fig/fig-corner.png)
+![A corner from a 4K PNG export](https://particle-logo.vercel.app/writeup/fig/fig-corner.png)
 
 *A corner from a 4K PNG export of the Hex preset. Each colour region gets its own traced row.*
 
@@ -48,11 +50,11 @@ It clusters the opaque pixels' colours with k-means++ (up to eight clusters, dro
 
 Each region gets a soft mask for tracing. Boundary pixels get a fractional weight by projecting their colour onto the line between the two regions' cluster colours, so the traced colour edge lands with sub-pixel precision instead of snapping to the pixel grid. Colour edges get a row of dots on each side, inset half a spacing, so the two rows sit exactly one spacing apart and the edge reads as a clean seam.
 
-![App Icon preset](fig/fig-regions.png)
+![App Icon preset](https://particle-logo.vercel.app/writeup/fig/fig-regions.png)
 
 *App Icon preset. The bolt is a traced region; the tile behind it is one region with a gradient the segmenter refused to split.*
 
-![Prism preset](fig/fig-prism-crop.png)
+![Prism preset](https://particle-logo.vercel.app/writeup/fig/fig-prism-crop.png)
 
 *Prism preset. A continuous gradient stays continuous.*
 
@@ -60,7 +62,7 @@ Each region gets a soft mask for tracing. Boundary pixels get a fractional weigh
 
 Halftone and dither layouts let dot density carry brightness. The obvious way to get a tone value is to read the sRGB channels, and it is wrong: sRGB is perceptually encoded, so a 50%-luminance grey (#BCBCBC) has a channel value of 74%. Compute density from that and mid-grey comes out three-quarters dense. Decode to linear light first and it comes out at 50%, which is what the eye expects when the dots are averaged.
 
-![Tone comparison](fig/fig-tone.png)
+![Tone comparison](https://particle-logo.vercel.app/writeup/fig/fig-tone.png)
 
 *The same grey square, halftoned from sRGB values (74% density) and from linear light (50%).*
 
