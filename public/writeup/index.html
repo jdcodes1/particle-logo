@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Making particle logos that survive a real export</title>
+  <meta name="description" content="How Particle Logo traces edges, fills interiors, keeps colour regions crisp, tones in linear light and exports frame-accurate video, with measurements.">
+  <link rel="canonical" href="https://particle-logo.vercel.app/writeup/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Making particle logos that survive a real export">
+  <meta property="og:description" content="Traced edges, a relaxed Poisson fill, colour-region segmentation, linear-light tone and frame-accurate export. What changed and why, with measurements.">
+  <meta property="og:url" content="https://particle-logo.vercel.app/writeup/">
+  <meta property="og:image" content="https://particle-logo.vercel.app/writeup/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Making particle logos that survive a real export">
+  <meta name="twitter:description" content="Traced edges, a relaxed Poisson fill, colour-region segmentation, linear-light tone and frame-accurate export, with measurements.">
+  <meta name="twitter:image" content="https://particle-logo.vercel.app/writeup/og.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    :root {
+      --bg: #08080a;
+      --ink: #ededf0;
+      --muted: #a1a1aa;
+      --faint: #6b6b76;
+      --line: rgba(255, 255, 255, 0.09);
+      --accent: #9595ff;
+      --code-bg: #16161a;
+      --fig: #0a0a0b;
+      --display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+      --body: 'Source Serif 4', 'Iowan Old Style', Georgia, serif;
+      --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--body);
+      font-size: 18px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      padding: 0 16px 80px;
+    }
+    .top {
+      max-width: 880px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+    .top a { color: var(--ink); text-decoration: none; }
+    .top a.cta { color: var(--accent); }
+    .wrap { max-width: 880px; margin: 0 auto; padding-top: 44px; }
+    article { max-width: 66ch; margin: 0 auto; }
+    h1 {
+      font-family: var(--display);
+      font-weight: 600;
+      font-size: clamp(34px, 5.5vw, 50px);
+      line-height: 1.08;
+      letter-spacing: -0.015em;
+      text-wrap: balance;
+      margin: 0 0 18px;
+    }
+    .byline { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-bottom: 36px; }
+    .byline a { color: var(--muted); }
+    h2 {
+      font-family: var(--display);
+      font-weight: 500;
+      font-size: 27px;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin: 52px 0 12px;
+      text-wrap: balance;
+    }
+    p { margin: 0 0 18px; }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    code { font-family: var(--mono); font-size: 0.84em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+    figure { width: min(880px, 100%); margin: 28px auto 30px; position: relative; left: 50%; transform: translateX(-50%); }
+    figure .frame { background: var(--fig); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+    figure img { display: block; width: 100%; height: auto; max-width: 100%; }
+    figure.square .frame { max-width: 560px; margin: 0 auto; }
+    figcaption { font-family: var(--mono); font-size: 12.5px; line-height: 1.5; color: var(--muted); margin: 10px auto 0; max-width: 66ch; }
+    .table-wrap { overflow-x: auto; margin: 6px 0 18px; }
+    table { border-collapse: collapse; width: 100%; font-size: 15.5px; font-variant-numeric: tabular-nums; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+    td.num, th.num { text-align: right; font-family: var(--mono); font-size: 14.5px; }
+    td.better { color: var(--accent); font-weight: 500; }
+    .end {
+      max-width: 66ch; margin: 56px auto 0; padding-top: 18px; border-top: 1px solid var(--line);
+      font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    }
+    @media (max-width: 480px) { body { font-size: 17px; } h2 { font-size: 24px; margin-top: 40px; } }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <nav class="top"><a href="/">Particle Logo</a><a class="cta" href="/">Open the app →</a></nav>
+  <div class="wrap">
+    <article>
+    <h1>Making particle logos that survive a real export</h1>
+    <div class="byline">Joey Dafforn · September 2026 · <a href="https://particle-logo.vercel.app/">particle-logo.vercel.app</a></div>
+
+    <p>Particle logos are easy to demo and hard to ship. The usual recipe samples the logo on a pixel grid at display size: walk the cells, drop a dot wherever the shape is filled. It looks fine in a tweet. Export it at 4K for a keynote slide and every shortcut shows. Edges turn into staircases, the interior is a visible lattice, gradients band, and small counters fill in or vanish depending on where the grid happened to land.</p>
+    <p>I rebuilt the pipeline behind <a href="https://particle-logo.vercel.app">Particle Logo</a> (MIT, <a href="https://github.com/jdcodes1/particle-logo">source on GitHub</a>) so the output holds up at print resolution. This is what changed, in the order the pixels go through it.</p>
+
+    <figure>
+      <div class="frame"><img src="fig/fig-before-after-crop.png" width="984" height="480" alt="Grid sampling on the left, traced outline plus Poisson fill on the right"></div>
+      <figcaption>Left: grid sampling. Right: the same mark, traced. Same spacing, same dot size.</figcaption>
+    </figure>
+
+    <h2>Edges</h2>
+    <p>Everything starts with a coverage field, not a bitmap. The SVG is rasterised at twice the stage resolution into a per-pixel coverage value from 0 to 1, plus its colour. Before that it is trimmed to its visible content box, so a logo whose viewBox carries padding does not shrink, and fitted into the stage with contain semantics so nothing stretches.</p>
+    <p>The silhouette is then traced as an iso-contour at coverage 0.5 with marching squares. Vertices are interpolated between pixel centres, so the outline has sub-pixel precision even though the field is a grid.</p>
+    <p>Corners matter more than anything else on a logo. The tracer measures the turning angle at each vertex over an arc-length window rather than between adjacent vertices, so pixel-level noise does not register. Turns sharper than about 40° survive non-maximum suppression and become pinned points. Each span between two corners is resampled at exactly the particle spacing, so a corner always gets a dot and the dots on either side run evenly up to it.</p>
+    <p>The outline row is inset along the inward normal by a fraction of the spacing (0.35 by default). A dot whose centre sits on the outline reads as fat; insetting puts the dot's edge on the outline instead. Thin strokes without room for the full inset get 40% of it. Loops shorter than about two spacings, like the dot on an i, collapse to a single particle at their centroid rather than a broken ring.</p>
+
+    <figure class="square">
+      <div class="frame"><img src="fig/fig-corner.png" width="800" height="800" alt="A corner from a 4K PNG export"></div>
+      <figcaption>A corner from a 4K PNG export of the Hex preset. Each colour region gets its own traced row.</figcaption>
+    </figure>
+
+    <h2>The fill</h2>
+    <p>The contour dots seed the interior. From there the fill is a Poisson-disk sample grown outward: pick an active dot, try up to 24 candidates placed exactly on the circle at the minimum distance (Roberts' variant of Bridson's algorithm, which packs tighter and more evenly than the classic annulus), keep the first that fits, retire the dot when nothing fits.</p>
+    <p>Poisson sampling guarantees no two dots are closer than the spacing. It says nothing about how far apart they can be, and the largest gaps are what the eye picks out as texture. So the interior is relaxed afterwards: fourteen iterations of short-range repulsion (radius 1.45× spacing, quadratic falloff, decaying strength), with contour dots pinned and moves capped at a quarter spacing and rejected if they would leave the shape. A second, slightly tighter fill then plugs any voids the relaxation opened.</p>
+    <p>I measured what this buys on the Heart preset at the default spacing by sampling the interior on a fine grid and recording each point's distance to its nearest particle, which is the radius of the largest empty circle that fits there.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Measure</th><th class="num">Unrelaxed</th><th class="num">Relaxed</th></tr></thead>
+        <tbody>
+          <tr><td>Largest empty circle, median</td><td class="num">2.30</td><td class="num">2.35</td></tr>
+          <tr><td>Largest empty circle, 99th percentile</td><td class="num">4.13</td><td class="num better">3.83</td></tr>
+          <tr><td>Largest empty circle, max</td><td class="num">4.98</td><td class="num better">4.83</td></tr>
+          <tr><td>Nearest-neighbour distance, mean</td><td class="num">5.43</td><td class="num">5.72</td></tr>
+          <tr><td>Nearest-neighbour distance, CV</td><td class="num">0.032</td><td class="num">0.040</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Units are stage units; the spacing is 5.5. Relaxation does not tighten the nearest-neighbour histogram. Poisson already put a hard floor under it, and spreading dots out to use the room actually widens it a touch. What it does is cut the tail: the worst 1% of gaps shrink by about 7%, and the single largest hole by 3%. That is the difference between a fill that reads as calm and one with visible sparse patches.</p>
+
+    <h2>Colour regions</h2>
+    <p>Flat brand marks often have hard colour edges inside the silhouette: a white glyph on a coloured tile, a two-tone ribbon. Those edges deserve the same traced outline as the silhouette. Gradients, on the other hand, must not be cut into bands. Telling the two apart is the job of a small segmenter.</p>
+    <p>It clusters the opaque pixels' colours with k-means++ (up to eight clusters, dropping any under 0.2% of pixels or within 14 RGB units of another). Then it looks at every pair of adjacent pixels that straddle two clusters. On an anti-aliased hard edge the colour jumps most of the way between the two cluster centres from one pixel to the next; on a gradient it creeps. If fewer than half the boundary pixels between two clusters jump, the clusters merge. What survives are regions separated by genuine hard edges.</p>
+    <p>Each region gets a soft mask for tracing. Boundary pixels get a fractional weight by projecting their colour onto the line between the two regions' cluster colours, so the traced colour edge lands with sub-pixel precision instead of snapping to the pixel grid. Colour edges get a row of dots on each side, inset half a spacing, so the two rows sit exactly one spacing apart and the edge reads as a clean seam.</p>
+
+    <figure class="square">
+      <div class="frame"><img src="fig/fig-regions.png" width="900" height="900" alt="App Icon preset"></div>
+      <figcaption>App Icon preset. The bolt is a traced region; the tile behind it is one region with a gradient the segmenter refused to split.</figcaption>
+    </figure>
+    <figure class="square">
+      <div class="frame"><img src="fig/fig-prism-crop.png" width="800" height="800" alt="Prism preset"></div>
+      <figcaption>Prism preset. A continuous gradient stays continuous.</figcaption>
+    </figure>
+
+    <h2>Tone in linear light</h2>
+    <p>Halftone and dither layouts let dot density carry brightness. The obvious way to get a tone value is to read the sRGB channels, and it is wrong: sRGB is perceptually encoded, so a 50%-luminance grey (#BCBCBC) has a channel value of 74%. Compute density from that and mid-grey comes out three-quarters dense. Decode to linear light first and it comes out at 50%, which is what the eye expects when the dots are averaged.</p>
+
+    <figure>
+      <div class="frame"><img src="fig/fig-tone.png" width="1800" height="600" alt="Tone comparison"></div>
+      <figcaption>The same grey square, halftoned from sRGB values (74% density) and from linear light (50%).</figcaption>
+    </figure>
+
+    <p>The second half of the trick is colour. When dots keep the source colour, a dark region gets dark dots and sparse dots, and the two dimmings compound. So in the original-colour mode every dot is drawn at the source hue pushed to full value (brightest channel at 1), and density is computed from the value channel. Density times dot colour then averages back to the source colour.</p>
+
+    <h2>Everything on the GPU</h2>
+    <p>Every motion that is a pure function of time lives in one vertex shader: the intro (five styles), morphs between layouts, idle drift, twinkle, the periodic sheen sweep, the hover lens and the parallax tilt. Each particle carries a start position, a home position, a delay and four random numbers, and the shader evaluates where it is at time t. The CPU streams one attribute per frame, the spring offsets from the pointer physics.</p>
+    <p>Dots are analytic discs: the fragment shader computes coverage as <code>clamp(R - r + 0.5, 0, 1)</code> for a one-pixel anti-aliased edge. Dots smaller than a pixel keep a one-pixel footprint and fade by the area they would cover, so a fine halftone does not sparkle. Everything is premultiplied alpha, so transparent exports composite correctly.</p>
+    <p>Morphing between layouts (a different logo, spacing or fill) was the source of the ugliest bugs. Ordering particles along a space-filling curve and pairing them by index produces seams wherever the curve jumps. What works is correspondence by nearest neighbour after normalising both layouts to a common frame: each new particle starts at its nearest old particle. That map is continuous, so regions flow into regions. Old particles nobody picked become ghosts that fly to their nearest new particle and shrink away. When several new particles spring from one old one, only the first keeps its size; the rest emerge small from a little cloud around it, so a split never starts as a bright stacked blob.</p>
+    <p>The tilt is a real perspective projection, and it is an exact identity when the pointer is away. Exports never see it, so every export is pixel-true to the layout.</p>
+
+    <h2>Exports</h2>
+    <p>Every export renders offscreen at a fixed timestep, so the output is identical regardless of display size or refresh rate. PNG goes up to 8K, after checking the GPU's maximum render size. SVG writes one real circle per particle, so it stays editable. Video is encoded in the browser with WebCodecs through mediabunny: H.264 MP4 where the browser can, VP9 WebM with an alpha channel for transparent clips. A looping clip is the intro, a hold, then the intro played backwards, so the last frame equals the first and the loop is seamless.</p>
+    <p>The embed is a single HTML file with no dependencies, about 100 KB for a typical logo. Positions are quantised to 16 bits and base64-encoded, the spring physics is the same code the app runs (serialised with <code>toString()</code>), and the intro plays when the logo scrolls into view.</p>
+
+    <h2>Try it</h2>
+    <p><a href="https://particle-logo.vercel.app">particle-logo.vercel.app</a>. Paste an SVG, pick a look, export. It is MIT licensed and <a href="https://github.com/jdcodes1/particle-logo">the source is on GitHub</a>. If you have a logo that breaks it, reply with the SVG and I will post the 4K.</p>
+  </article>
+    <div class="end">MIT licensed. Source on <a href="https://github.com/jdcodes1/particle-logo">GitHub</a>. Figures rendered with the app's own exporter.</div>
+  </div>
+</body>
+</html>
