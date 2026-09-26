@@ -1,246 +1,181 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
-import * as THREE from 'three';
-import { vertexShader, fragmentShader } from './shaders';
-import { DITHER_ALGORITHMS } from './dithering';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { ParticleEngine } from './engine/ParticleEngine';
+import { rasterizeSvg } from './engine/rasterize';
+import { createLayoutService, MissingFieldError } from './engine/layoutService';
+import { ASPECTS, RASTER_KEYS, layoutKeyOf } from './engine/config';
+import { exportPNG, exportSVG, exportVideo, exportHTML } from './engine/exporters';
+
+const keyOf = (cfg, keys) => keys.map((k) => String(cfg[k])).join('|');
 
 /**
- * Sample pixel data from an SVG string rendered to a hidden canvas.
+ * Renders an SVG logo as an interactive particle field.
+ *
+ * Props:
+ *  - svg: SVG markup
+ *  - config: see engine/config.js DEFAULT_CONFIG
+ *  - onStats({ count }), onError(message | null)
+ *  - ref: { replay(), exportPNG(opts), exportSVG(opts), exportVideo(opts), exportHTML(opts) }
  */
-function getPixelData(svgString, width, height) {
-  return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const img = new Image();
-    const encoded = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
-
-    img.onload = () => {
-      try {
-        ctx.clearRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        const imageData = ctx.getImageData(0, 0, width, height);
-        resolve(imageData.data);
-      } catch (e) {
-        reject(e);
-      }
-    };
-    img.onerror = () => reject(new Error('SVG load failed'));
-    img.src = encoded;
-  });
-}
-
-export default function ParticleLogo({
-  svgString,
-  width = 400,
-  height = 400,
-  config,
-  onParticleCount,
-}) {
-  const canvasRef = useRef(null);
-  const mouseRef = useRef({ x: 9999, y: 9999, active: false });
+export default function ParticleLogo({ svg, config, onStats, onError, className = '', label = 'Particle logo', ref }) {
   const frameRef = useRef(null);
+  const canvasRef = useRef(null);
+  const engineRef = useRef(null);
+  const serviceRef = useRef(null);
+  const layoutKeyRef = useRef(null);
+  const callbacks = useRef({ onStats, onError });
   const [status, setStatus] = useState('loading');
+  const [box, setBox] = useState({ w: 0, h: 0 });
 
   useEffect(() => {
-    let disposed = false;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    callbacks.current = { onStats, onError };
+  });
 
-    let renderer;
-    try {
-      renderer = new THREE.WebGLRenderer({ canvas, alpha: false, antialias: true });
-    } catch {
-      setStatus('error');
-      return;
-    }
+  const stage = ASPECTS[config.aspect] || ASPECTS['1:1'];
 
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(new THREE.Color(config.bgColor), 1);
-
-    const scene = new THREE.Scene();
-    const hw = width / 2, hh = height / 2;
-    const camera = new THREE.OrthographicCamera(-hw, hw, hh, -hh, 0.1, 100);
-    camera.position.z = 10;
-    renderer.render(scene, camera);
-
-    async function init() {
-      let data;
-      try {
-        const px = await getPixelData(svgString, width, height);
-        const algo = DITHER_ALGORITHMS[config.ditherAlgorithm];
-        if (algo.hasFS) {
-          data = algo.fn(px, width, height, config.gap, {
-            threshold: config.fsThreshold,
-            gamma: config.fsGamma,
-            errorStrength: config.fsErrorStrength,
-            serpentine: config.fsSerpentine,
-            invert: config.fsInvert,
-            particleColor: config.fsParticleColor,
-          });
-        } else if (algo.hasIntensity) {
-          data = algo.fn(px, width, height, config.gap, config.ditherIntensity);
-        } else {
-          data = algo.fn(px, width, height, config.gap);
-        }
-      } catch (e) {
-        console.error('Sampling failed:', e);
-        setStatus('error');
-        return;
-      }
-
-      if (disposed || !data.count) {
-        setStatus('error');
-        return;
-      }
-
-      const { positions: home, colors: homeColors, count } = data;
-      onParticleCount?.(count);
-
-      const geo = new THREE.BufferGeometry();
-      const pos = new Float32Array(count * 3);
-      const vel = new Float32Array(count * 3);
-      const sizes = new Float32Array(count);
-
-      // Random scatter for entrance animation
-      for (let i = 0; i < count; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = 250 + Math.random() * 200;
-        pos[i * 3] = Math.cos(a) * r;
-        pos[i * 3 + 1] = Math.sin(a) * r;
-        pos[i * 3 + 2] = 0;
-        sizes[i] = Math.random();
-      }
-
-      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      geo.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(homeColors), 3));
-      geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-
-      const dpr = Math.min(window.devicePixelRatio, 2);
-      const mat = new THREE.ShaderMaterial({
-        vertexShader,
-        fragmentShader,
-        transparent: true,
-        depthWrite: false,
-        uniforms: {
-          uPointSize: { value: config.particleSize * dpr },
-          uSizeVariance: { value: config.sizeVariance },
-          uSoftness: { value: config.softness },
-        },
-      });
-
-      const points = new THREE.Points(geo, mat);
-      scene.add(points);
-      setStatus('ready');
-
-      const posAttr = geo.attributes.position;
-
-      function animate() {
-        if (disposed) return;
-        frameRef.current = requestAnimationFrame(animate);
-
-        // Update uniforms in case config changed (they're refs)
-        mat.uniforms.uPointSize.value = config.particleSize * dpr;
-        mat.uniforms.uSizeVariance.value = config.sizeVariance;
-        mat.uniforms.uSoftness.value = config.softness;
-        renderer.setClearColor(new THREE.Color(config.bgColor), 1);
-
-        const m = mouseRef.current;
-        const a = posAttr.array;
-        const spring = config.spring;
-        const damping = config.damping;
-        const repelRadius = config.repelRadius;
-        const repelStrength = config.repelStrength;
-
-        for (let i = 0; i < count; i++) {
-          const ix = i * 3, iy = i * 3 + 1;
-          let vx = vel[ix], vy = vel[iy];
-
-          // Spring to home
-          vx += (home[ix] - a[ix]) * spring;
-          vy += (home[iy] - a[iy]) * spring;
-
-          // Mouse repulsion
-          if (m.active) {
-            const dx = a[ix] - m.x, dy = a[iy] - m.y;
-            const d2 = dx * dx + dy * dy;
-            const rr = repelRadius * repelRadius;
-            if (d2 < rr && d2 > 1) {
-              const d = Math.sqrt(d2);
-              const f = repelStrength * (1 - d / repelRadius);
-              vx += (dx / d) * f;
-              vy += (dy / d) * f;
-            }
-          }
-
-          // Damping
-          vx *= damping;
-          vy *= damping;
-
-          // Integrate
-          a[ix] += vx;
-          a[iy] += vy;
-          vel[ix] = vx;
-          vel[iy] = vy;
-        }
-
-        posAttr.needsUpdate = true;
-        renderer.render(scene, camera);
-      }
-
-      animate();
-    }
-
-    init();
-
+  // Engine lifetime.
+  useEffect(() => {
+    const engine = new ParticleEngine(canvasRef.current, {
+      onStats: (s) => callbacks.current.onStats?.(s),
+    });
+    engineRef.current = engine;
+    const service = createLayoutService();
+    serviceRef.current = service;
     return () => {
-      disposed = true;
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      renderer.dispose();
+      engine.dispose();
+      service.dispose();
+      engineRef.current = null;
+      serviceRef.current = null;
     };
-  }, [svgString, width, height, config.gap, config.ditherAlgorithm, config.ditherIntensity, config.bgColor, config.fsThreshold, config.fsGamma, config.fsErrorStrength, config.fsSerpentine, config.fsInvert]);
-  // Only re-init on structural changes. Physics/visual params update live via refs in animate loop.
-
-  const onMove = useCallback((e) => {
-    const r = canvasRef.current?.getBoundingClientRect();
-    if (!r) return;
-    mouseRef.current = {
-      x: e.clientX - r.left - width / 2,
-      y: -(e.clientY - r.top - height / 2),
-      active: true,
-    };
-  }, [width, height]);
-
-  const onLeave = useCallback(() => {
-    mouseRef.current.active = false;
   }, []);
 
-  const onTouch = useCallback((e) => {
-    const t = e.touches[0];
-    const r = canvasRef.current?.getBoundingClientRect();
-    if (!r || !t) return;
-    mouseRef.current = {
-      x: t.clientX - r.left - width / 2,
-      y: -(t.clientY - r.top - height / 2),
-      active: true,
+  // Fit the canvas to the frame at the stage's aspect ratio.
+  useEffect(() => {
+    const el = frameRef.current;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      const s = Math.min(width / stage.w, height / stage.h);
+      setBox({ w: Math.floor(stage.w * s), h: Math.floor(stage.h * s) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stage.w, stage.h]);
+
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine || !box.w) return;
+    engine.setStage(stage.w, stage.h);
+    engine.setViewport(box.w, box.h, Math.min(window.devicePixelRatio || 1, 2.5));
+  }, [box.w, box.h, stage.w, stage.h]);
+
+  // Live (non-structural) settings.
+  useEffect(() => {
+    engineRef.current?.setConfig(config);
+  }, [config]);
+
+  // Picking a different intro previews it right away.
+  const introRef = useRef(config.intro);
+  useEffect(() => {
+    if (introRef.current === config.intro) return;
+    introRef.current = config.intro;
+    engineRef.current?.replay();
+  }, [config.intro]);
+
+  // Structural: rasterize + layout, debounced so sliders stay responsive.
+  const rasterKey = svg + '§' + keyOf(config, RASTER_KEYS);
+  const layoutKey = rasterKey + '§' + layoutKeyOf(config);
+  const configRef = useRef(config);
+  useEffect(() => {
+    configRef.current = config;
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const engine = engineRef.current;
+      const service = serviceRef.current;
+      if (!engine || !service) return;
+      const cfg = configRef.current;
+      const st = ASPECTS[cfg.aspect] || ASPECTS['1:1'];
+      const ensureField = async (force) => {
+        if (!force && service.has(rasterKey)) return;
+        const field = await rasterizeSvg(svg, { stageW: st.w, stageH: st.h, logoScale: cfg.logoScale, supersample: 2 });
+        if (!cancelled) service.addField(rasterKey, field);
+      };
+      try {
+        await ensureField(false);
+        if (cancelled) return;
+        let layout;
+        try {
+          layout = await service.layout(rasterKey, cfg);
+        } catch (err) {
+          if (!(err instanceof MissingFieldError) || cancelled) throw err;
+          await ensureField(true);
+          if (cancelled) return;
+          layout = await service.layout(rasterKey, cfg);
+        }
+        if (cancelled) return;
+        if (!layout.count) throw new Error('No visible particles — try a denser setting');
+        engine.setStage(st.w, st.h);
+        const first = layoutKeyRef.current === null;
+        engine.setLayout(layout, first ? 'intro' : 'morph');
+        layoutKeyRef.current = layoutKey;
+        setStatus('ready');
+        callbacks.current.onError?.(null);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        if (layoutKeyRef.current === null) setStatus('error');
+        callbacks.current.onError?.(err.message || String(err));
+      }
+    }, layoutKeyRef.current === null ? 0 : 80);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
     };
-  }, [width, height]);
+  }, [svg, rasterKey, layoutKey]);
+
+  useImperativeHandle(ref, () => ({
+    replay: () => engineRef.current?.replay(),
+    exportPNG: (opts) => exportPNG(engineRef.current, opts),
+    exportSVG: (opts) => exportSVG(engineRef.current, opts),
+    exportVideo: (opts) => exportVideo(engineRef.current, opts),
+    exportHTML: (opts) => exportHTML(engineRef.current, opts),
+    get engine() {
+      return engineRef.current;
+    },
+  }), []);
+
+  const toStage = (e) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    return [
+      ((e.clientX - r.left) / r.width - 0.5) * stage.w,
+      (0.5 - (e.clientY - r.top) / r.height) * stage.h,
+    ];
+  };
 
   return (
-    <div className="canvas-wrapper">
+    <div ref={frameRef} className={`particle-frame ${className}`}>
       <canvas
         ref={canvasRef}
-        width={width}
-        height={height}
-        onMouseMove={onMove}
-        onMouseLeave={onLeave}
-        onTouchMove={onTouch}
-        onTouchEnd={onLeave}
-        style={{ width, height }}
+        className="particle-canvas"
+        role="img"
+        aria-label={label}
+        style={{ width: box.w, height: box.h }}
+        onPointerMove={(e) => engineRef.current?.pointerMove(...toStage(e))}
+        onPointerLeave={() => engineRef.current?.pointerLeave()}
+        onPointerCancel={() => engineRef.current?.pointerLeave()}
+        onPointerDown={(e) => {
+          const [x, y] = toStage(e);
+          engineRef.current?.pointerMove(x, y);
+          if (config.clickBurst) engineRef.current?.burst(x, y);
+        }}
+        onPointerUp={(e) => {
+          if (e.pointerType !== 'mouse') engineRef.current?.pointerLeave();
+        }}
       />
-      {status === 'loading' && <div className="canvas-loading">sampling...</div>}
-      {status === 'error' && <div className="canvas-loading">failed to load SVG</div>}
+      {status !== 'ready' && (
+        <div className="particle-status">{status === 'error' ? 'This SVG could not be rendered' : 'Sampling…'}</div>
+      )}
     </div>
   );
 }
