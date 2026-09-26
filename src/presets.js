@@ -1,44 +1,54 @@
 /**
- * Sample logos. All use transparent backgrounds; the sampler trims empty
- * space and fits the visible content to the stage automatically.
+ * Sample logos — original marks, so screenshots and exports are free to
+ * share. All use transparent backgrounds; the sampler trims empty space and
+ * fits the visible content to the stage automatically.
  */
 
 export const PRESET_LOGOS = {
-  linear: {
-    name: 'Linear',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  orbit: {
+    name: 'Orbit',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="24" fill="#f5f5f7"/>
+  <path d="M50 8a42 42 0 1 1-29.7 12.3" fill="none" stroke="#f5f5f7" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="20.3" cy="20.3" r="7" fill="#7c7cff"/>
+</svg>`,
+  },
+  prism: {
+    name: 'Prism',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="p" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <path d="M50 8 L94 86 H6 Z" fill="url(#p)" stroke="url(#p)" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M50 42 L70 78 H30 Z" fill="#0a0a0b"/>
+</svg>`,
+  },
+  wave: {
+    name: 'Wave',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
+  <path d="M8 62c14-30 26-30 40 0s26 30 40 0 26-30 24-8" fill="none" stroke="#34d399" stroke-width="14" stroke-linecap="round"/>
+</svg>`,
+  },
+  hex: {
+    name: 'Hex',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M50 4 90 27v46L50 96 10 73V27z" fill="#f5f5f7"/>
+  <path d="M50 30 68 40.5v21L50 72 32 61.5v-21z" fill="#0a0a0b"/>
+  <path d="M50 4 90 27v46L50 96 10 73V27z" fill="none" stroke="#fb923c" stroke-width="7" stroke-linejoin="round"/>
+</svg>`,
+  },
+  mark: {
+    name: 'Wordmark',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 290 80">
   <g fill="#f5f5f7">
-    <path d="M0.403013 37.3991L26.6009 63.597C13.2225 61.3356 2.66442 50.7775 0.403013 37.3991Z"/>
-    <path d="M0 30.2868L33.7132 64C35.7182 63.8929 37.6742 63.6013 39.5645 63.142L0.85799 24.4355C0.398679 26.3259 0.10713 28.2818 0 30.2868Z"/>
-    <path d="M2.53593 19.4042L44.5958 61.4641C46.1277 60.8066 47.598 60.0331 48.9956 59.1546L4.84543 15.0044C3.96691 16.402 3.19339 17.8723 2.53593 19.4042Z"/>
-    <path d="M7.69501 11.1447C13.5677 4.32093 22.2677 0 31.9769 0C49.6628 0 64 14.3372 64 32.0231C64 41.7323 59.6791 50.4323 52.8553 56.305L7.69501 11.1447Z"/>
+    <path d="M10 70 34 10h14l24 60H57l-5-14H30l-5 14zm24-26h14l-7-20z"/>
+    <path d="M84 40q0-31 30-31 20 0 27 15l-13 6q-4-8-14-8-15 0-15 18t15 18q10 0 14-8l13 6q-7 15-27 15-30 0-30-31z"/>
+    <path d="M148 70V10h16l20 36 20-36h16v60h-15V38l-16 28h-10l-16-28v32z"/>
+    <path d="M238 70V10h44v13h-29v10h26v13h-26v11h30v13z"/>
   </g>
-</svg>`,
-  },
-  github: {
-    name: 'GitHub',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <path fill="#f5f5f7" fill-rule="evenodd" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-</svg>`,
-  },
-  apple: {
-    name: 'Apple',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <path fill="#f5f5f7" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>
-</svg>`,
-  },
-  vercel: {
-    name: 'Vercel',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 65">
-  <path fill="#f5f5f7" d="M37.5274 0L75.0548 65H0L37.5274 0Z"/>
-</svg>`,
-  },
-  netflix: {
-    name: 'Netflix',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 280">
-  <rect x="0" y="0" width="42" height="280" fill="#b1060f"/>
-  <rect x="118" y="0" width="42" height="280" fill="#b1060f"/>
-  <polygon points="0,0 42,0 160,280 118,280" fill="#e50914"/>
 </svg>`,
   },
   spark: {

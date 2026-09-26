@@ -34,3 +34,6 @@ export const CloseIcon = () => (
 export const CodeIcon = () => (
   <svg {...base}><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5" /></svg>
 );
+export const LinkIcon = () => (
+  <svg {...base}><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-1 1M9.5 6.5a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l1-1" /></svg>
+);

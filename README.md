@@ -2,7 +2,7 @@
 
 Turn any SVG logo into an interactive particle field — then export it as a
 high‑resolution image, a vector SVG, a frame‑accurate video or a drop‑in HTML
-embed. Inspired by [particl.art](https://particl.art) and
+embed. Free and MIT‑licensed. Inspired by [particl.art](https://particl.art) and
 [Emil Kowalski's demo](https://x.com/emilkowalski/status/2036778116748542220).
 
 **[Live Demo](https://particle-logo.vercel.app)** · **[Watch the 1‑minute walkthrough](docs/media/demo.mp4)**
@@ -60,7 +60,9 @@ Run the engine's unit tests (contours, layouts, color regions, color and
 motion math) with `npm test`.
 
 Drop an SVG anywhere on the page, paste SVG markup (⌘/Ctrl + V), or use
-**Upload SVG**. Settings persist between visits.
+**Upload SVG**. Settings persist between visits, and **Share** copies a link
+that reproduces the exact logo and settings for anyone who opens it (custom
+SVGs travel in the link too, up to a few kilobytes compressed).
 
 | Shortcut | Action |
 | --- | --- |
@@ -119,3 +121,7 @@ The canvas fills its parent while keeping the stage's aspect ratio. See
   the **Assemble** or **Vortex** intro reads beautifully on a projector.
 - Video export needs WebCodecs (recent Chrome, Edge or Safari). Browsers
   without H.264 fall back to VP9, and the app tells you which codec was used.
+
+## License
+
+[MIT](LICENSE)

@@ -8,9 +8,10 @@ import { LAYOUTS } from './engine/layouts';
 import { contrastRatio, hexToRgb } from './engine/color';
 import { download } from './engine/exporters';
 import { parseSvg } from './engine/rasterize';
+import { buildShareUrl, parseShareHash } from './engine/share';
 import { Section, Slider, Segmented, Toggle, ColorField, Select } from './components/Controls';
 import {
-  ReplayIcon, ExpandIcon, UploadIcon, DownloadIcon, ShuffleIcon, ResetIcon, CloseIcon, CodeIcon,
+  ReplayIcon, ExpandIcon, UploadIcon, DownloadIcon, ShuffleIcon, ResetIcon, CloseIcon, CodeIcon, LinkIcon,
 } from './components/Icons';
 
 const STORAGE_KEY = 'particle-logo:v2';
@@ -28,7 +29,7 @@ function loadSaved() {
     const saved = JSON.parse(raw);
     return {
       config: { ...DEFAULT_CONFIG, ...(saved.config || {}) },
-      source: saved.source?.type === 'custom' && saved.source.svg ? saved.source : { type: 'preset', id: saved.source?.id in PRESET_LOGOS ? saved.source.id : 'linear' },
+      source: saved.source?.type === 'custom' && saved.source.svg ? saved.source : { type: 'preset', id: saved.source?.id in PRESET_LOGOS ? saved.source.id : 'orbit' },
     };
   } catch {
     return null;
@@ -48,10 +49,21 @@ function thumbUrl(svg) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
+/** A share link in the URL wins over saved settings. */
+function loadInitial() {
+  const saved = loadSaved();
+  const shared = parseShareHash();
+  if (!shared) return { config: saved?.config ?? DEFAULT_CONFIG, source: saved?.source ?? { type: 'preset', id: 'orbit' }, pendingSvg: null };
+  const config = { ...DEFAULT_CONFIG, ...shared.config };
+  if (shared.svg) return { config, source: null, pendingSvg: shared.svg };
+  const id = shared.preset in PRESET_LOGOS ? shared.preset : 'orbit';
+  return { config, source: { type: 'preset', id }, pendingSvg: null };
+}
+
 export default function App() {
-  const saved = useMemo(loadSaved, []);
-  const [config, setConfig] = useState(saved?.config ?? DEFAULT_CONFIG);
-  const [source, setSource] = useState(saved?.source ?? { type: 'preset', id: 'linear' });
+  const initial = useMemo(loadInitial, []);
+  const [config, setConfig] = useState(initial.config);
+  const [source, setSource] = useState(initial.source);
   const [stats, setStats] = useState({ count: 0 });
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -72,8 +84,23 @@ export default function App() {
     if (import.meta.env.DEV) window.__particleLogo = logoRef;
   }, []);
 
-  const svg = source.type === 'custom' ? source.svg : PRESET_LOGOS[source.id].svg;
-  const sourceName = source.type === 'custom' ? source.name || 'custom' : PRESET_LOGOS[source.id].name;
+  // A share link carrying a custom SVG decodes asynchronously.
+  useEffect(() => {
+    if (!initial.pendingSvg) return;
+    let cancelled = false;
+    initial.pendingSvg
+      .then(({ svg, name }) => {
+        if (cancelled) return;
+        setSource(isSvgText(svg) ? { type: 'custom', svg, name } : { type: 'preset', id: 'orbit' });
+      })
+      .catch(() => !cancelled && setSource({ type: 'preset', id: 'orbit' }));
+    return () => {
+      cancelled = true;
+    };
+  }, [initial]);
+
+  const svg = !source ? null : source.type === 'custom' ? source.svg : PRESET_LOGOS[source.id].svg;
+  const sourceName = !source ? 'shared' : source.type === 'custom' ? source.name || 'custom' : PRESET_LOGOS[source.id].name;
 
   const set = useCallback((key, value) => setConfig((c) => ({ ...c, [key]: value })), []);
   const setExport = (key, value) => setExportOpts((o) => ({ ...o, [key]: value }));
@@ -90,12 +117,30 @@ export default function App() {
 
   // Persist settings (best effort — storage may be unavailable).
   useEffect(() => {
+    if (!source) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ config, source }));
     } catch {
       /* ignore */
     }
   }, [config, source]);
+
+  const share = async () => {
+    if (!source) return;
+    try {
+      const { url, includesSvg } = await buildShareUrl({ source, config });
+      history.replaceState(null, '', url);
+      await navigator.clipboard.writeText(url);
+      notify(
+        source.type === 'custom' && !includesSvg
+          ? 'Link copied — this SVG is too large to travel in a link, so it carries the settings only.'
+          : 'Link copied. Anyone who opens it sees this exact logo and settings.',
+      );
+    } catch (err) {
+      console.error(err);
+      notify('Couldn’t copy the link — your browser blocked clipboard access.', 'error');
+    }
+  };
 
   const loadCustom = useCallback((text, name = 'custom') => {
     try {
@@ -280,6 +325,10 @@ export default function App() {
             </div>
           </div>
           <div className="topbar-actions">
+            <button type="button" className="icon-btn" onClick={share} title="Copy a link to this logo and settings">
+              <LinkIcon />
+              <span>Share</span>
+            </button>
             <button type="button" className="icon-btn" onClick={() => logoRef.current?.replay()} title="Replay intro (R)">
               <ReplayIcon />
               <span>Replay</span>
@@ -292,6 +341,7 @@ export default function App() {
         </header>
 
         <div className="stage" style={{ '--stage-bg': config.background, '--stage-aspect': `${stage.w} / ${stage.h}` }}>
+          {svg && (
           <ParticleLogo
             ref={logoRef}
             svg={svg}
@@ -301,6 +351,7 @@ export default function App() {
             label={`${sourceName} logo made of particles`}
             className="stage-canvas"
           />
+          )}
           {presenting && (
             <button type="button" className="exit-present" onClick={() => setPresenting(false)} title="Exit (Esc)">
               <CloseIcon />
@@ -331,7 +382,7 @@ export default function App() {
               <button
                 type="button"
                 key={id}
-                className={`preset ${source.type === 'preset' && source.id === id ? 'active' : ''}`}
+                className={`preset ${source?.type === 'preset' && source.id === id ? 'active' : ''}`}
                 onClick={() => setSource({ type: 'preset', id })}
                 title={p.name}
               >
@@ -341,7 +392,7 @@ export default function App() {
             ))}
           </div>
           <div className="button-row">
-            <button type="button" className={`btn ${source.type === 'custom' ? 'btn-active' : ''}`} onClick={() => fileRef.current?.click()}>
+            <button type="button" className={`btn ${source?.type === 'custom' ? 'btn-active' : ''}`} onClick={() => fileRef.current?.click()}>
               <UploadIcon />
               Upload SVG
             </button>
