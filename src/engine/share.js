@@ -6,7 +6,8 @@
  * deflated first (CompressionStream), which is why encoding is async and
  * why a link carrying an SVG resolves a moment after the page opens.
  */
-import { DEFAULT_CONFIG } from './config';
+// Explicit extension so plain Node (scripts/reply.mjs) can import this module too.
+import { DEFAULT_CONFIG } from './config.js';
 
 const VERSION = 1;
 /** Browsers cap URLs well above this; we stay conservative so links survive chat apps. */

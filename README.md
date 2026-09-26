@@ -112,6 +112,19 @@ The canvas fills its parent while keeping the stage's aspect ratio. See
    inlines a small WebGL runtime (`engine/embedRuntime.js`) that reuses the
    same shaders and motion code.
 
+The longer story, with measurements and figures, is in
+[docs/writeup/post.md](docs/writeup/post.md).
+
+### Batch rendering from the command line
+
+`scripts/reply.mjs` turns an SVG into a share link and a high‑resolution PNG
+without opening the app, by driving the live site in headless Chromium:
+
+```bash
+npm i -D playwright && npx playwright install chromium   # once
+node scripts/reply.mjs logo.svg --look Neon --size 4096   # writes ./replies/logo-4096.png
+```
+
 ## Tips for great results
 
 - Filled shapes work best; strokes are fine as long as they're not hairlines.
